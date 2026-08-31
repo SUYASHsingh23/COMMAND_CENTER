@@ -12,8 +12,9 @@ import { EscalationQueue } from './EscalationQueue'
 
 const API_BASE = '/api/v1'
 
+function getApiBase() { return API_BASE }
 
-type Panel = 'transcript' | 'timeline' | 'tools' | 'rag' | 'memory' | 'summary'
+type Panel = 'transcript' | 'timeline' | 'tools' | 'rag' | 'agent_state' | 'summary'
 
 export function CommandCenter() {
   useSupervisorStream()
@@ -33,14 +34,16 @@ export function CommandCenter() {
     return () => clearInterval(t)
   }, [])
 
-  // Load Dashboard KPI metrics & recent conversations from PostgreSQL on mount
+  // Load Dashboard KPI metrics & real conversations from PostgreSQL
   useEffect(() => {
     const load = async () => {
       try {
-        const [rMetrics, rConvs] = await Promise.all([
+        const [rMetrics, rConvs, rTtl] = await Promise.all([
           fetch(`${API_BASE}/analytics/dashboard`),
-          fetch(`${API_BASE}/analytics/conversations?limit=20`),
+          fetch(`${API_BASE}/analytics/conversations?limit=50`),
+          fetch(`${API_BASE}/analytics/sessions/ttl-status`),
         ])
+
         if (rMetrics.ok) setMetrics(await rMetrics.json())
         if (rConvs.ok) {
           const convs = await rConvs.json()
@@ -51,18 +54,35 @@ export function CommandCenter() {
               channel: c.channel || 'web',
               status: c.status || 'completed',
               sentiment: c.sentiment || 'neutral',
+              customer_name: c.customer_name,
+              message_count: c.message_count,
+              tool_count: c.tool_count,
               started_at: c.started_at,
+              ended_at: c.ended_at,
+            })
+          })
+        }
+        if (rTtl.ok) {
+          const ttlData = await rTtl.json()
+          ttlData.forEach((t: any) => {
+            upsertSession({
+              session_id: t.session_id,
+              inactive_seconds: t.inactive_seconds,
+              remaining_seconds: t.remaining_seconds,
+              is_idle: t.is_idle,
+              is_expired: t.is_expired,
             })
           })
         }
       } catch (_) {}
     }
     load()
-    const t = setInterval(load, 10000)
+    const t = setInterval(load, 15000)
     return () => clearInterval(t)
   }, [])
 
-  // Fetch session details when a conversation is selected
+
+  // Fetch full session detail when a conversation is selected
   useEffect(() => {
     if (!activeSessionId) return
     const active = sessions[activeSessionId]
@@ -96,16 +116,20 @@ export function CommandCenter() {
           const entities = (data.intents || []).reduce((acc: any, i: any) => ({ ...acc, ...(i.entities || {}) }), {})
           const latestIntent = (data.intents || [])[0]
 
-          const timeline = (data.tool_executions || []).map((t: any) => ({
-            type: 'tool_completed' as const,
-            timestamp: t.timestamp || new Date().toISOString(),
-            label: `Tool: ${t.tool_name}`,
-            detail: `${t.status} · ${t.duration_ms}ms`,
-            status: t.status,
+          // Use pre-built timeline from backend (chronological, all event types)
+          const timeline = (data.timeline || []).map((e: any) => ({
+            type: e.type as any,
+            timestamp: e.timestamp || new Date().toISOString(),
+            label: e.label,
+            detail: e.detail,
+            status: e.status,
           }))
 
           upsertSession({
             session_id: active.session_id,
+            customer_name: data.customer_name,
+            status: data.status || active.status,
+            ended_at: data.ended_at,
             messages: msgs,
             tool_executions: tools,
             intents: intents,
@@ -113,7 +137,6 @@ export function CommandCenter() {
             sentiment: latestIntent?.sentiment || active.sentiment,
             urgency: latestIntent?.urgency || active.urgency,
             agent_timeline: timeline,
-            // Populate the Summary tab from the DB record if present
             ...(data.summary ? { call_summary: data.summary } : {}),
           })
         }
@@ -121,6 +144,7 @@ export function CommandCenter() {
     }
     loadDetail()
   }, [activeSessionId])
+
 
   const sessionList = Object.values(sessions)
   const active = activeSessionId ? sessions[activeSessionId] : null
@@ -141,14 +165,71 @@ export function CommandCenter() {
 
         {active ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* Header for active session */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+                  {active.customer_name || 'Anonymous User'}
+                </h2>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Session ID: <span style={{ fontFamily: 'var(--font-mono)' }}>{active.session_id}</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                {active.status === 'active' && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm("Are you sure you want to end this active session?")) return;
+                      try {
+                        const r = await fetch(`${getApiBase()}/analytics/sessions/${active.session_id}/force-end`, { method: 'POST' });
+                        if (r.ok) {
+                          alert("Session ended by admin.");
+                          // It will update via websocket/polling, but we can optimistically set status
+                          useSupervisorStore.getState().setSessionStatus(active.session_id, 'completed');
+                        }
+                      } catch (e) { console.error(e); }
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: '#f87171',
+                      background: 'rgba(248,113,113,0.1)',
+                      border: '1px solid rgba(248,113,113,0.3)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ⏹ End Session
+                  </button>
+                )}
+                {active.status === 'escalated' && (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#fff', background: 'var(--accent-red)', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                      Take Over Call
+                    </button>
+                    <button style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)', borderRadius: 4, cursor: 'pointer' }}>
+                      Resolve
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <PanelTabs active={panel} onSelect={setPanel} session={active} />
             <div style={{ flex: 1, overflow: 'hidden' }}>
-              {panel === 'transcript' && <ConversationMonitor session={active} />}
-              {panel === 'timeline'   && <AgentTimeline session={active} />}
-              {panel === 'tools'      && <ToolExecutionView session={active} />}
-              {panel === 'rag'        && <RagSourcesView session={active} />}
-              {panel === 'memory'     && <MemoryPanel session={active} />}
-              {panel === 'summary'    && <CallSummary session={active} />}
+              {panel === 'transcript'  && <ConversationMonitor session={active} />}
+              {panel === 'timeline'    && <AgentTimeline session={active} />}
+              {panel === 'tools'       && <ToolExecutionView session={active} />}
+              {panel === 'rag'         && <RagSourcesView session={active} />}
+              {panel === 'agent_state' && <MemoryPanel session={active} />}
+              {panel === 'summary'     && <CallSummary session={active} />}
             </div>
           </div>
         ) : (
@@ -222,12 +303,12 @@ function PanelTabs({ active, onSelect, session }: {
   session: SupervisorSession
 }) {
   const tabs: Array<{ id: Panel; label: string; badge?: number }> = [
-    { id: 'transcript', label: '💬 Transcript', badge: session.messages.length || undefined },
-    { id: 'timeline',   label: '⏱ Timeline',   badge: session.agent_timeline.length || undefined },
-    { id: 'tools',      label: '⚙️ Tools',      badge: session.tool_executions.length || undefined },
-    { id: 'rag',        label: '📚 RAG',        badge: session.rag_passages.length || undefined },
-    { id: 'memory',     label: '🧠 Memory' },
-    { id: 'summary',    label: session.is_escalated ? '🚨 Summary' : '📋 Summary' },
+    { id: 'transcript',  label: '💬 Transcript',   badge: session.messages.length || undefined },
+    { id: 'timeline',    label: '⏱ Timeline',      badge: session.agent_timeline.length || undefined },
+    { id: 'tools',       label: '⚙️ Tools',         badge: session.tool_executions.length || undefined },
+    { id: 'rag',         label: '📚 RAG',           badge: session.rag_passages.length || undefined },
+    { id: 'agent_state', label: '🔍 Agent State' },
+    { id: 'summary',     label: session.is_escalated ? '🚨 Summary' : '📋 Summary' },
   ]
 
 
@@ -393,8 +474,31 @@ function SessionCard({ session, selected, onClick }: {
   selected: boolean
   onClick: () => void
 }) {
-  const sentColor = { positive: 'var(--accent-green)', neutral: 'var(--accent-blue)', frustrated: 'var(--accent-amber)', angry: 'var(--accent-red)' }[session.sentiment] ?? 'var(--accent-blue)'
+  const sentColor = {
+    positive: '#34d399', neutral: '#60a5fa', frustrated: '#fbbf24', angry: '#f87171'
+  }[session.sentiment] ?? '#60a5fa'
+
+  const isActive = session.status === 'active'
   const isEscalated = session.status === 'escalated'
+
+  const statusDot = isActive
+    ? { color: '#34d399', pulse: true }
+    : isEscalated
+    ? { color: '#f97316', pulse: false }
+    : { color: '#94a3b8', pulse: false }
+
+  const msgCount = session.message_count ?? session.messages.length
+  const toolCount = session.tool_count ?? session.tool_executions.length
+
+  const timeLabel = session.ended_at
+    ? new Date(session.ended_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : session.started_at
+    ? new Date(session.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null
+
+  const dateLabel = session.started_at
+    ? new Date(session.started_at).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    : null
 
   return (
     <button
@@ -402,31 +506,72 @@ function SessionCard({ session, selected, onClick }: {
       style={{
         width: '100%',
         textAlign: 'left',
-        padding: '9px 10px',
-        marginBottom: 3,
-        background: selected ? 'rgba(59,130,246,0.08)' : 'transparent',
-        border: selected ? '1px solid rgba(59,130,246,0.25)' : '1px solid transparent',
-        borderRadius: 'var(--radius-md)',
+        padding: '10px 10px',
+        marginBottom: 4,
+        background: selected ? 'rgba(96,165,250,0.08)' : 'rgba(255,255,255,0.01)',
+        border: selected ? '1px solid rgba(96,165,250,0.3)' : '1px solid rgba(255,255,255,0.05)',
+        borderRadius: 8,
         cursor: 'pointer',
-        transition: 'all var(--transition-fast)',
+        transition: 'all 0.15s ease',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-        <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-          {session.session_id.slice(0, 8)}…
-        </span>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          {isEscalated && <span style={{ fontSize: 9, color: 'var(--accent-red)', fontWeight: 700 }}>ESC</span>}
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: sentColor }} />
+      {/* Row 1: Name + status */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{
+            width: 7, height: 7, borderRadius: '50%', background: statusDot.color,
+            boxShadow: statusDot.pulse ? `0 0 6px ${statusDot.color}` : 'none',
+            flexShrink: 0,
+          }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
+            {session.customer_name || session.session_id.slice(0, 8) + '…'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+          {isEscalated && <span style={{ fontSize: 8, color: '#f97316', fontWeight: 700, padding: '1px 4px', background: 'rgba(249,115,22,0.12)', borderRadius: 3 }}>ESC</span>}
+          {isActive && (
+            <span style={{
+              fontSize: 8,
+              color: session.is_idle ? '#fbbf24' : '#34d399',
+              fontWeight: 700,
+              padding: '1px 4px',
+              background: session.is_idle ? 'rgba(251,191,36,0.12)' : 'rgba(52,211,153,0.12)',
+              borderRadius: 3
+            }}>
+              {session.is_idle && session.remaining_seconds != null
+                ? `IDLE ${Math.floor(session.remaining_seconds / 60)}m`
+                : 'LIVE'}
+            </span>
+          )}
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: sentColor, flexShrink: 0 }} />
         </div>
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        {session.messages.length} turns · {session.channel}
-        {session.urgency === 'high' && <span style={{ color: 'var(--accent-amber)', marginLeft: 4 }}>⚡</span>}
+
+      {/* Row 2: Stats + time */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+            💬 {msgCount}
+          </span>
+          {toolCount > 0 && (
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+              ⚙️ {toolCount}
+            </span>
+          )}
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+            {session.channel}
+          </span>
+        </div>
+        {(timeLabel || dateLabel) && (
+          <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+            {dateLabel !== new Date().toLocaleDateString([], { month: 'short', day: 'numeric' }) ? dateLabel + ' ' : ''}{timeLabel}
+          </span>
+        )}
       </div>
     </button>
   )
 }
+
 
 function EmptyState({ hasAny }: { hasAny: boolean }) {
   return (

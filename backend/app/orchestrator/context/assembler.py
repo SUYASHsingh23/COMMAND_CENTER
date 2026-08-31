@@ -71,6 +71,14 @@ class ContextAssembler:
             ent_str = ", ".join(f"{k}={v}" for k, v in context.entities.items())
             lines.append(f"[ENTITIES]: {ent_str}")
 
+        if context.recent_messages:
+            lines.append("[CONVERSATION HISTORY]:")
+            for msg in context.recent_messages:
+                role = msg.get("role", "unknown").upper()
+                content = msg.get("content", "")
+                lines.append(f"  {role}: {content}")
+
+
         if context.customer_verified and context.customer_profile:
             p = context.customer_profile
             customer_line = (

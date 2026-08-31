@@ -155,6 +155,7 @@ interface DashboardStats {
   outstanding_amount: number
   pending_refunds: number
   threshold_pending_refunds: number
+  investigation_count: number
   failed_transactions: number
   refund_threshold: number
 }
@@ -241,6 +242,7 @@ export default function BillingDashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [refunds, setRefunds] = useState<RefundRequest[]>([])
   const [allRefunds, setAllRefunds] = useState<RefundRequest[]>([])
+  const [allInvestigations, setAllInvestigations] = useState<RefundRequest[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'transactions' | 'refunds'>('overview')
@@ -265,22 +267,29 @@ export default function BillingDashboard() {
     fetchCustomers('')
     fetch(`${API}/stats`).then(r => r.json()).then(setStats).catch(() => {})
     fetch(`${API}/refunds?status=under_review`).then(r => r.json()).then(setAllRefunds).catch(() => {})
+    fetch(`${API}/refunds?investigation_only=true`).then(r => r.json()).then(setAllInvestigations).catch(() => {})
   }, [])
 
-  // Listen for real-time invoice updates
+  const refreshQueues = () => {
+    fetch(`${API}/refunds?status=under_review`).then(r => r.json()).then(setAllRefunds).catch(() => {})
+    fetch(`${API}/refunds?investigation_only=true`).then(r => r.json()).then(setAllInvestigations).catch(() => {})
+    fetch(`${API}/stats`).then(r => r.json()).then(setStats).catch(() => {})
+  }
+
+  // Listen for real-time invoice + customer updates
   useEffect(() => {
     supervisorWsClient.connectSupervisor()
     const unsubscribe = supervisorWsClient.on((evt) => {
-      if (evt.event === 'invoice.updated') {
-        // If the updated invoice belongs to the currently viewed customer, refresh their details
-        if (selected && evt.customer_id === selected) {
+      if (evt.event === 'invoice.updated' || evt.event === 'customer.updated') {
+        // Refresh data for currently viewed customer
+        if (selected && (evt.customer_id === selected)) {
           selectCustomer(selected)
         }
+        // Always refresh queues and stats on any update
+        refreshQueues()
       }
     })
-    return () => {
-      unsubscribe()
-    }
+    return () => { unsubscribe() }
   }, [selected])
 
   const fetchCustomers = (q: string) => {
@@ -362,9 +371,9 @@ export default function BillingDashboard() {
               { label: 'CUSTOMERS', val: stats.total_customers, color: 'var(--text-primary)' },
               { label: 'OVERDUE', val: stats.overdue_invoices, color: '#ef4444' },
               { label: 'PENDING REFUNDS', val: stats.pending_refunds, color: '#f59e0b' },
+              { label: 'INVESTIGATIONS', val: stats.investigation_count ?? 0, color: stats.investigation_count > 0 ? '#ef4444' : '#64748b' },
               { label: 'OUTSTANDING', val: `₹${fmt(stats.outstanding_amount, 0)}`, color: '#f59e0b' },
               { label: 'FAILED TXN', val: stats.failed_transactions, color: '#ef4444' },
-              { label: `THRESHOLD ≤₹${fmt(stats.refund_threshold, 0)}`, val: 'AUTO', color: '#22c55e' },
             ].map(item => (
               <div key={item.label} style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: item.color }}>{item.val}</div>
@@ -569,18 +578,20 @@ export default function BillingDashboard() {
           ) : null}
         </main>
 
-        {/* ── Right Panel — All refunds pending review ─────────────────── */}
+        {/* ── Right Panel — Refund Queue + Investigations ─────────────── */}
         <aside style={{
           width: 320, borderLeft: '1px solid var(--border)',
           display: 'flex', flexDirection: 'column', flexShrink: 0,
-          background: 'var(--bg-secondary)',
+          background: 'var(--bg-secondary)', overflowY: 'auto',
         }}>
           <RefundQueuePanel
             refunds={allRefunds}
-            onRefresh={() => {
-              fetch(`${API}/refunds?status=under_review`).then(r => r.json()).then(setAllRefunds).catch(() => {})
-              if (selected) selectCustomer(selected)
-            }}
+            onRefresh={refreshQueues}
+          />
+          <div style={{ borderTop: '2px solid var(--border)', flexShrink: 0 }} />
+          <InvestigationQueuePanel
+            investigations={allInvestigations}
+            onRefresh={refreshQueues}
           />
         </aside>
       </div>
@@ -598,7 +609,7 @@ export default function BillingDashboard() {
           onSuccess={() => {
             setShowRefundModal(false)
             selectCustomer(selected)
-            fetch(`${API}/refunds?status=under_review`).then(r => r.json()).then(setAllRefunds).catch(() => {})
+            refreshQueues()
           }}
         />
       )}
@@ -1142,7 +1153,7 @@ function RefundQueuePanel({ refunds, onRefresh }: { refunds: RefundRequest[]; on
               {r.reason.replace(/_/g, ' ')} • {r.priority} priority
             </div>
             <div style={{ fontSize: 10, color: '#f59e0b', marginBottom: 8 }}>
-              ⚠ Threshold exceeded (limit ₹{fmt(r.threshold_amount ?? 5000)})
+              ⚠ Requires supervisor approval
             </div>
             {r.sla_deadline && (
               <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 6 }}>
@@ -1183,6 +1194,181 @@ function RefundQueuePanel({ refunds, onRefresh }: { refunds: RefundRequest[]; on
       <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px', display: 'flex', justifyContent: 'center' }}>
         <button onClick={onRefresh} style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>
           ↻ Refresh queue
+        </button>
+      </div>
+    </>
+  )
+}
+
+// ─── Investigation Queue Panel ────────────────────────────────────────────────
+
+function InvestigationQueuePanel({ investigations, onRefresh }: { investigations: RefundRequest[]; onRefresh: () => void }) {
+  const [reviewing, setReviewing] = useState<string | null>(null)
+  const [form, setForm] = useState({ status: 'approved', notes: '', amount: '' })
+
+  const submitReview = async (id: string) => {
+    const body: any = {
+      status: form.status,
+      reviewed_by: 'supervisor',
+      review_notes: form.notes || null,
+      rejection_reason: form.status === 'rejected' ? (form.notes || 'Rejected after investigation') : null,
+    }
+    if (form.status === 'approved' && form.amount) body.approved_amount = parseFloat(form.amount)
+    const res = await fetch(`${API}/refunds/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert(err.detail || 'Failed to process request. Please check the balance and try again.')
+      return
+    }
+    setReviewing(null)
+    onRefresh()
+  }
+
+  const priorityColor = (p: string) => {
+    const m: Record<string, string> = { critical: '#ef4444', high: '#f97316', medium: '#f59e0b', low: '#64748b' }
+    return m[p] || '#64748b'
+  }
+
+  return (
+    <>
+      <div style={{ padding: '14px 14px 8px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14 }}>🔍</span>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#ef4444', letterSpacing: '-0.01em' }}>
+              Investigations
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              {investigations.length} case{investigations.length !== 1 ? 's' : ''} requiring human review
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+        {investigations.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+            No active investigations
+          </div>
+        ) : investigations.map(r => (
+          <div key={r.refund_id} style={{
+            padding: '10px', marginBottom: 8, borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-primary)',
+            border: `1px solid ${priorityColor(r.priority)}50`,
+            boxShadow: r.priority === 'critical' ? `0 0 10px ${priorityColor(r.priority)}25` : 'none',
+          }}>
+            {/* Case Reference — prominently displayed, shared with customer */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              marginBottom: 6, padding: '6px 8px',
+              background: `${priorityColor(r.priority)}10`,
+              borderRadius: 'var(--radius-md)',
+              border: `1px solid ${priorityColor(r.priority)}30`,
+            }}>
+              <div>
+                <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 1 }}>CASE REFERENCE</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: priorityColor(r.priority) }}>
+                  {r.refund_number || r.refund_id.slice(0, 8).toUpperCase()}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 1 }}>AMOUNT</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: priorityColor(r.priority) }}>₹{fmt(r.requested_amount)}</div>
+              </div>
+            </div>
+
+            {/* Priority badge */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+              <Badge label={r.priority} color={priorityColor(r.priority)} />
+              <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{r.reason.replace(/_/g, ' ')}</span>
+            </div>
+
+            {r.reason_detail && (
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.4 }}>
+                {r.reason_detail.slice(0, 120)}{r.reason_detail.length > 120 ? '…' : ''}
+              </div>
+            )}
+
+            {/* Internal alert — supervisor eyes only */}
+            {r.review_notes === null && (
+              <div style={{
+                fontSize: 10, padding: '6px 8px', marginBottom: 8,
+                background: `${priorityColor(r.priority)}12`,
+                border: `1px solid ${priorityColor(r.priority)}30`,
+                borderRadius: 'var(--radius-md)', color: priorityColor(r.priority), lineHeight: 1.4,
+              }}>
+                {r.priority === 'critical'
+                  ? '🔒 Internal: Multiple requests in 7 days — possible fraud. Review transaction history.'
+                  : '🔒 Internal: Duplicate attempt within 24h.'}
+              </div>
+            )}
+
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 8 }}>
+              Opened: {fmtDateTime(r.created_at)}
+            </div>
+
+            {/* Review form */}
+            {reviewing === r.refund_id ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                  style={{ padding: '5px 7px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: 11 }}>
+                  <option value="approved">Approve Refund</option>
+                  <option value="rejected">Reject — Close Case</option>
+                  <option value="escalated">Escalate to Legal / Compliance</option>
+                </select>
+                {form.status === 'approved' && (
+                  <input
+                    type="number"
+                    placeholder={`Approved amount (max: ₹${r.requested_amount})`}
+                    value={form.amount}
+                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                    style={{ padding: '5px 7px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: 11 }}
+                  />
+                )}
+                <textarea
+                  placeholder="Investigation notes / decision rationale (required)"
+                  value={form.notes} rows={3}
+                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                  style={{ padding: '5px 7px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: 11, resize: 'vertical' }}
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => submitReview(r.refund_id)}
+                    disabled={!form.notes.trim()}
+                    style={{
+                      flex: 1, padding: '6px', fontSize: 11, fontWeight: 600, border: 'none',
+                      borderRadius: 'var(--radius-md)', cursor: form.notes.trim() ? 'pointer' : 'not-allowed',
+                      background: form.status === 'approved' ? '#22c55e' : form.status === 'rejected' ? '#ef4444' : '#a78bfa',
+                      color: '#000', opacity: form.notes.trim() ? 1 : 0.5,
+                    }}
+                  >
+                    {form.status === 'approved' ? '✓ Approve' : form.status === 'rejected' ? '✕ Reject' : '↑ Escalate'}
+                  </button>
+                  <button onClick={() => setReviewing(null)} style={{ padding: '6px 10px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-secondary)', cursor: 'pointer' }}>✕</button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setReviewing(r.refund_id); setForm({ status: 'approved', notes: '', amount: '' }) }}
+                style={{
+                  width: '100%', padding: '6px', fontSize: 11, fontWeight: 600,
+                  background: `${priorityColor(r.priority)}20`, color: priorityColor(r.priority),
+                  border: `1px solid ${priorityColor(r.priority)}40`, borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                }}
+              >
+                Investigate →
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+        <button onClick={onRefresh} style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+          ↻ Refresh investigations
         </button>
       </div>
     </>

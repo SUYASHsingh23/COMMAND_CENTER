@@ -17,6 +17,7 @@ from app.speech.tts import EdgeTTSClient
 from app.orchestrator.agent import AgentOrchestrator
 import app.models
 from app.models.conversation import Message
+from app.api.v1.routes.analytics import expire_idle_sessions
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
@@ -24,9 +25,24 @@ logger = logging.getLogger(__name__)
 
 _audio_routers: dict[str, AudioRouter] = {}
 _agent = AgentOrchestrator()
+_ttl_task: asyncio.Task | None = None
 
+async def _ttl_loop():
+    logger.info("Session TTL enforcement loop started")
+    while True:
+        try:
+            await asyncio.sleep(60) # Run every minute
+            async with async_session_factory() as db:
+                res = await expire_idle_sessions(db=db)
+                if res["expired"] > 0:
+                    logger.info("TTL Enforcer expired %d idle sessions: %s", res["expired"], res["sessions"])
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.error("Error in TTL loop: %s", exc)
 
 @asynccontextmanager
+
 async def lifespan(app: FastAPI):
     await get_redis_client()
     async with async_session_factory() as db:
@@ -45,8 +61,13 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Embedder pre-warm failed (non-fatal): %s", exc)
 
+    global _ttl_task
+    _ttl_task = asyncio.create_task(_ttl_loop())
+
     logger.info("Command Center backend started")
     yield
+    if _ttl_task:
+        _ttl_task.cancel()
     await close_redis()
     logger.info("Command Center backend stopped")
 

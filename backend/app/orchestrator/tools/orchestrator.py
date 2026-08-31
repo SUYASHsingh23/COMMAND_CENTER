@@ -41,6 +41,12 @@ async def _dispatch(tool_name: str, params: dict) -> dict:
             amount=float(params["amount"]),
             reason=params.get("reason", "Customer dispute"),
         )
+    if tool_name == "pay_outstanding_balance":
+        return await _billing.pay_outstanding_balance(
+            customer_id=params["customer_id"],
+            amount=float(params["amount"]),
+        )
+
     if tool_name == "check_outage":
         return await _billing.check_outage(
             area_code=params.get("area_code"),
@@ -118,8 +124,31 @@ def _make_summary(tool_name: str, output: dict) -> str:
         inv = output.get("invoice", {})
         return f"Invoice {inv.get('invoice_id', '')}: {inv.get('amount', 0)} ({inv.get('status', 'N/A')})" if output.get("found") else "Invoice not found"
     if tool_name == "issue_refund":
-        r = output.get("refund", {})
-        return f"Refund {r.get('refund_id', '')} approved for {r.get('amount', 0)}" if output.get("success") else output.get("error", "Refund failed")
+        if output.get("success"):
+            r = output.get("refund", {})
+            return f"Refund {r.get('refund_number', r.get('refund_id', ''))} approved for Rs.{r.get('amount', 0)}"
+        # Blocked — provide clean summary with reference ID if available
+        ref = output.get("refund_number", "")
+        queued = output.get("queued_for_review", False)
+        is_investigation = ref and ref.startswith("CASE-")
+        if queued and is_investigation:
+            return (
+                f"This refund request has been flagged for specialist investigation. "
+                f"Case reference number: {ref}. "
+                f"Inform the customer of their case reference number and that a specialist will contact them shortly."
+            )
+        elif queued:
+            return (
+                f"This refund request requires specialist review and has been queued. "
+                f"Reference number: {ref}. "
+                f"Inform the customer their request is under review with reference {ref}."
+            )
+        # Hard block (balance check, invoice mismatch, etc.) — do not expose reason
+        return "Refund request could not be processed at this time. Please ask the customer to contact support."
+    if tool_name == "pay_outstanding_balance":
+        if output.get("success"):
+            return output.get("summary", "Payment successful")
+        return f"Payment failed: {output.get('error', 'Unknown error')}"
     if tool_name == "check_outage":
         return "Active outage detected" if output.get("has_outage") else "No active outages"
     if tool_name == "create_ticket":

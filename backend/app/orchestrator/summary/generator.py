@@ -16,10 +16,16 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 SUMMARY_SYSTEM = (
-    "You are a call summary engine for a telecom customer service system. "
-    "Given a conversation, produce a concise 2-3 sentence summary of: what the customer needed, "
-    "what was done, and the outcome. Then classify the resolution as one of: "
-    "resolved | partially_resolved | unresolved | escalated. "
+    "You are a call summary engine for an enterprise telecom CRM system (ConnectPlus). "
+    "Given a conversation between a customer and an AI agent, produce a structured, detailed summary.\n\n"
+    "Your summary must cover:\n"
+    "1. What the customer called about (primary issue / request)\n"
+    "2. What information was gathered or verified (account details, invoice data, identity)\n"
+    "3. What actions were taken (refunds issued with reference numbers, tickets created, updates made, escalations raised)\n"
+    "4. What the final outcome was for the customer (resolved, unresolved, pending review, escalated to human)\n\n"
+    "Write 3-5 clear sentences. Be specific: include reference numbers, amounts, invoice IDs if mentioned. "
+    "Avoid vague phrases like 'the agent handled the request'. "
+    "Then classify: resolved | partially_resolved | unresolved | escalated.\n\n"
     "Respond ONLY with JSON: {\"summary\": \"...\", \"resolution\": \"...\"}"
 )
 
@@ -64,11 +70,13 @@ class CallSummaryGenerator:
         duration_sec: int,
         db: AsyncSession,
     ) -> CallSummary:
-        history = memory.history[-12:]
+        history = memory.history  # full conversation — not just last 12
+        # Build a rich context for the LLM: conversation + tools used
         conversation_text = "\n".join(
             f"{turn['role'].capitalize()}: {turn['content']}"
             for turn in history
         )
+        tools_context = f"\nTools used during this conversation: {', '.join(sorted(set(tools_used)))}" if tools_used else ""
 
         summary_text = "Conversation handled by AI agent."
         resolution = "unresolved"
@@ -79,9 +87,9 @@ class CallSummaryGenerator:
                     model="qwen/qwen3.8-27b",
                     messages=[
                         {"role": "system", "content": SUMMARY_SYSTEM},
-                        {"role": "user", "content": f"Conversation:\n{conversation_text}"},
+                        {"role": "user", "content": f"Conversation:\n{conversation_text}{tools_context}\n\nDuration: {duration_sec} seconds"},
                     ],
-                    max_tokens=256,
+                    max_tokens=600,
                     temperature=0.1,
                 )
                 data = _extract_json(response.choices[0].message.content or "{}")

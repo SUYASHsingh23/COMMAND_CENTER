@@ -56,8 +56,16 @@ export interface SupervisorSession {
   channel: string
   status: 'active' | 'completed' | 'escalated'
   started_at: string
+  ended_at?: string
+  customer_name?: string
+  message_count?: number
+  tool_count?: number
   sentiment: string
   urgency: string
+  inactive_seconds?: number
+  remaining_seconds?: number
+  is_idle?: boolean
+  is_expired?: boolean
   messages: Message[]
   intents: string[]
   entities: Record<string, string>
@@ -113,6 +121,10 @@ const defaultSession = (session_id: string): SupervisorSession => ({
   started_at: new Date().toISOString(),
   sentiment: 'neutral',
   urgency: 'medium',
+  inactive_seconds: 0,
+  remaining_seconds: 900,
+  is_idle: false,
+  is_expired: false,
   messages: [],
   intents: [],
   entities: {},

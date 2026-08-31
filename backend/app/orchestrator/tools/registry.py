@@ -73,6 +73,14 @@ _REGISTRY: dict[str, ToolSchema] = {
         params={"customer_id": "str", "reason": "str", "sentiment": "str"},
         required_params=["customer_id"],
     ),
+    "pay_outstanding_balance": ToolSchema(
+        name="pay_outstanding_balance",
+        description="Pay outstanding balance from the customer's available account balance",
+        params={"customer_id": "str", "amount": "float"},
+        required_params=["customer_id", "amount"],
+        requires_auth=True,
+    ),
+
     "update_customer_details": ToolSchema(
         name="update_customer_details",
         description="Update customer profile details like email, phone, plan, or address",

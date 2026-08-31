@@ -25,6 +25,8 @@ from app.api.v1.schemas.billing import (
     RefundCreate, RefundReview, RefundOut,
     BillingAlertOut, BillingSummary,
 )
+from app.observability.bus import event_bus
+from app.api.websocket.events import CustomerUpdatedEvent, InvoiceUpdatedEvent
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -370,8 +372,9 @@ async def create_refund(payload: RefundCreate, db: AsyncSession = Depends(get_db
 
 @router.get("/refunds", response_model=list[RefundOut])
 async def list_all_refunds(
-    status: str = Query("", description="pending/under_review/approved/rejected/processed"),
+    status: str = Query("", description="pending/under_review/approved/rejected/processed/investigation"),
     threshold_only: bool = Query(False, description="Only show threshold-exceeded refunds"),
+    investigation_only: bool = Query(False, description="Only show flagged investigation cases"),
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
 ):
@@ -381,6 +384,8 @@ async def list_all_refunds(
         stmt = stmt.where(RefundRequest.status == status)
     if threshold_only:
         stmt = stmt.where(RefundRequest.threshold_exceeded == True)
+    if investigation_only:
+        stmt = stmt.where(RefundRequest.status == "investigation")
     stmt = stmt.order_by(RefundRequest.created_at.desc()).limit(limit)
     rows = (await db.execute(stmt)).scalars().all()
     return [RefundOut.model_validate(r) for r in rows]
@@ -407,7 +412,7 @@ async def review_refund(
     payload: RefundReview,
     db: AsyncSession = Depends(get_db),
 ):
-    """Supervisor approves or rejects a threshold-exceeded refund."""
+    """Supervisor approves or rejects a refund — including investigation cases."""
     refund = await db.get(RefundRequest, refund_id)
     if not refund:
         raise HTTPException(status_code=404, detail="Refund not found")
@@ -419,10 +424,30 @@ async def review_refund(
     refund.reviewed_at = datetime.utcnow()
 
     if payload.status == "approved":
-        refund.approved_amount = payload.approved_amount or refund.requested_amount
+        approved_amt = payload.approved_amount or refund.requested_amount
+        refund.approved_amount = approved_amt
         refund.processed_at = datetime.utcnow()
         if payload.refund_mode:
             refund.refund_mode = payload.refund_mode
+
+        # Fetch customer account and validate/deduct balance
+        account = None
+        if refund.account_id:
+            account = await db.get(Account, refund.account_id)
+        if not account:
+            acc_result = await db.execute(
+                select(Account).where(Account.customer_id == refund.customer_id).limit(1)
+            )
+            account = acc_result.scalar_one_or_none()
+
+        if account:
+            if float(approved_amt) > float(account.balance):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Approved refund amount INR {approved_amt} exceeds customer account balance INR {account.balance}. Adjust the amount."
+                )
+            account.balance = float(account.balance) - float(approved_amt)
+
         # Create the actual refund transaction
         txn = BillingTransaction(
             customer_id=refund.customer_id,
@@ -430,7 +455,7 @@ async def review_refund(
             invoice_id=refund.invoice_id,
             transaction_type="refund",
             transaction_sub_type="supervisor_approved",
-            amount=refund.approved_amount,
+            amount=approved_amt,
             status="success",
             payment_method=refund.refund_mode or "original_source",
             initiated_by="supervisor",
@@ -443,12 +468,27 @@ async def review_refund(
             alert_type="refund_processed",
             severity="info",
             title="Refund Approved",
-            message=f"Your refund of {refund.currency} {refund.approved_amount} has been approved by supervisor and will be processed within 3-5 business days.",
+            message=f"Your refund of INR {approved_amt} has been approved by a supervisor and will be processed within 3-5 business days.",
             entity_type="refund",
         ))
 
     await db.commit()
     await db.refresh(refund)
+
+    # Emit real-time WebSocket events so frontend refreshes immediately
+    try:
+        await event_bus.emit(
+            "system",
+            CustomerUpdatedEvent(session_id="system", customer_id=str(refund.customer_id))
+        )
+        if refund.invoice_id:
+            await event_bus.emit(
+                "system",
+                InvoiceUpdatedEvent(session_id="system", customer_id=str(refund.customer_id), invoice_id=str(refund.invoice_id))
+            )
+    except Exception as ws_exc:
+        logger.warning("WS emit error on refund review: %s", ws_exc)
+
     return RefundOut.model_validate(refund)
 
 
@@ -504,6 +544,7 @@ async def billing_stats(db: AsyncSession = Depends(get_db)):
             func.sum(case((RefundRequest.status.in_(["pending", "under_review"]), 1), else_=0)).label("pending"),
             func.sum(case((and_(RefundRequest.threshold_exceeded == True,
                                 RefundRequest.status.in_(["pending", "under_review"])), 1), else_=0)).label("threshold_pending"),
+            func.sum(case((RefundRequest.status == "investigation", 1), else_=0)).label("investigation_count"),
             func.coalesce(func.sum(case((RefundRequest.status.in_(["approved", "processed"]),
                                               RefundRequest.approved_amount), else_=0)), 0).label("approved_total"),
         )
@@ -525,6 +566,7 @@ async def billing_stats(db: AsyncSession = Depends(get_db)):
         "outstanding_amount": float(id_.outstanding or 0),
         "pending_refunds": int(rd_.pending or 0),
         "threshold_pending_refunds": int(rd_.threshold_pending or 0),
+        "investigation_count": int(rd_.investigation_count or 0),
         "total_refunds_approved": float(rd_.approved_total or 0),
         "failed_transactions": failed_txns,
         "refund_threshold": settings.refund_threshold_amount,
