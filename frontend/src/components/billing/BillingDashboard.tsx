@@ -181,12 +181,13 @@ const fmtDateTime = (s: string | null | undefined) => {
 
 const tierConfig = (tier: string) => {
   const map: Record<string, { bg: string; color: string }> = {
-    platinum: { bg: '#1a1535', color: '#a78bfa' },
-    gold:     { bg: '#1a1600', color: '#fbbf24' },
-    silver:   { bg: '#141a1f', color: '#94a3b8' },
-    standard: { bg: '#101418', color: '#64748b' },
+    premium: { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
+    gold:    { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b' },
+    elite:   { bg: 'rgba(15,118,110,0.12)', color: '#0f766e' },
+    basic:   { bg: 'rgba(100,116,139,0.10)', color: '#64748b' },
+    standard:{ bg: 'rgba(100,116,139,0.10)', color: '#64748b' },
   }
-  return map[tier?.toLowerCase()] || map.standard
+  return map[tier?.toLowerCase()] || map.basic
 }
 
 const statusColor = (s: string): string => {
@@ -439,10 +440,10 @@ export default function BillingDashboard() {
               }}
             >
               <option value="">All tiers</option>
-              <option value="platinum">Platinum</option>
+              <option value="premium">Premium</option>
               <option value="gold">Gold</option>
-              <option value="silver">Silver</option>
-              <option value="standard">Standard</option>
+              <option value="elite">Elite</option>
+              <option value="basic">Basic</option>
             </select>
           </div>
 
@@ -938,6 +939,8 @@ function InvoiceDetailExpanded({ invoice: inv }: { invoice: InvoiceFull }) {
 function TransactionsTab({ transactions, filter, onFilter, allCount }: {
   transactions: Transaction[]; filter: string; onFilter: (f: string) => void; allCount: number
 }) {
+  const [expanded, setExpanded] = React.useState<string | null>(null)
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -957,54 +960,145 @@ function TransactionsTab({ transactions, filter, onFilter, allCount }: {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {transactions.map(t => (
-          <div key={t.transaction_id} style={{
-            display: 'grid', gridTemplateColumns: '36px 1fr 1fr auto auto',
-            alignItems: 'center', gap: 12, padding: '10px 14px',
-            background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)',
-            border: `1px solid ${t.status === 'failed' ? '#ef444430' : 'var(--border)'}`,
-          }}>
-            {/* Type icon */}
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: `${txnTypeColor(t.transaction_type)}20`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 16, color: txnTypeColor(t.transaction_type), fontWeight: 700,
-            }}>{txnTypeIcon(t.transaction_type)}</div>
+        {transactions.map(t => {
+          const isExpanded = expanded === t.transaction_id
+          // Pick the best reference ID to show
+          const refId = (t as any).upi_txn_id || (t as any).bank_ref || t.gateway_ref || null
+          const gateway = (t as any).payment_gateway || null
+          const glCode = (t as any).gl_code || null
+          const receiptUrl = (t as any).receipt_url || null
+          const authCode = (t as any).auth_code || null
 
-            {/* Description */}
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
-                {t.transaction_type}{t.transaction_sub_type ? ` — ${t.transaction_sub_type.replace(/_/g, ' ')}` : ''}
+          return (
+            <div key={t.transaction_id} style={{
+              background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)',
+              border: `1px solid ${t.status === 'failed' ? '#ef444430' : 'var(--border)'}`,
+              overflow: 'hidden',
+            }}>
+              {/* Main row */}
+              <div
+                onClick={() => setExpanded(isExpanded ? null : t.transaction_id)}
+                style={{
+                  display: 'grid', gridTemplateColumns: '36px 1fr 1fr auto auto',
+                  alignItems: 'center', gap: 12, padding: '10px 14px', cursor: 'pointer',
+                }}
+              >
+                {/* Type icon */}
+                <div style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: `${txnTypeColor(t.transaction_type)}20`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, color: txnTypeColor(t.transaction_type), fontWeight: 700,
+                }}>{txnTypeIcon(t.transaction_type)}</div>
+
+                {/* Description */}
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {t.transaction_type}{t.transaction_sub_type ? ` — ${t.transaction_sub_type.replace(/_/g, ' ')}` : ''}
+                    {gateway && (
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-full)', background: '#3b82f615', color: '#3b82f6', border: '1px solid #3b82f630', letterSpacing: '0.04em' }}>
+                        {gateway}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
+                    {t.payment_method && <span>📱 {t.payment_method}</span>}
+                    {refId && (
+                      <span style={{ fontFamily: 'var(--font-mono)', opacity: 0.7 }}>
+                        {String(refId).slice(0, 22)}{String(refId).length > 22 ? '…' : ''}
+                      </span>
+                    )}
+                  </div>
+                  {t.failure_reason && (
+                    <div style={{ fontSize: 10, color: '#ef4444', marginTop: 2 }}>
+                      ⚠ {t.failure_code && `[${t.failure_code}] `}{t.failure_reason}
+                      {t.retry_count > 0 && ` — retried ${t.retry_count}×`}
+                    </div>
+                  )}
+                </div>
+
+                {/* Date */}
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{fmtDateTime(t.created_at)}</div>
+
+                {/* Amount */}
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: txnTypeColor(t.transaction_type) }}>
+                    {t.transaction_type === 'refund' || t.transaction_type === 'credit' ? '+' : ''}₹{fmt(t.amount)}
+                  </div>
+                  {t.gateway_fee > 0 && <div style={{ fontSize: 9, color: 'var(--text-secondary)' }}>fee ₹{fmt(t.gateway_fee)}</div>}
+                </div>
+
+                {/* Status */}
+                <Badge label={t.status} color={statusColor(t.status)} />
               </div>
-              <div style={{ fontSize: 10, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}>
-                {t.payment_method && <span>{t.payment_method}</span>}
-                {t.payment_method_detail && <span style={{ fontFamily: 'var(--font-mono)' }}>{t.payment_method_detail}</span>}
-                {t.gateway_ref && <span style={{ fontFamily: 'var(--font-mono)', opacity: 0.6 }}>{t.gateway_ref.slice(0, 18)}…</span>}
-              </div>
-              {t.failure_reason && (
-                <div style={{ fontSize: 10, color: '#ef4444', marginTop: 2 }}>
-                  ⚠ {t.failure_code && `[${t.failure_code}] `}{t.failure_reason}
-                  {t.retry_count > 0 && ` — retried ${t.retry_count}×`}
+
+              {/* Expanded detail row */}
+              {isExpanded && (
+                <div style={{
+                  borderTop: '1px solid var(--border)', padding: '10px 14px 12px',
+                  background: 'var(--bg-primary)',
+                  display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px 16px',
+                }}>
+                  {refId && (
+                    <div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 2 }}>
+                        {(t as any).upi_txn_id ? 'UPI TXN ID' : (t as any).bank_ref ? 'BANK REF' : 'GATEWAY REF'}
+                      </div>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', wordBreak: 'break-all' }}>{refId}</div>
+                    </div>
+                  )}
+                  {authCode && (
+                    <div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 2 }}>AUTH CODE</div>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#a78bfa' }}>{authCode}</div>
+                    </div>
+                  )}
+                  {glCode && (
+                    <div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 2 }}>GL CODE</div>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#10b981' }}>{glCode}</div>
+                    </div>
+                  )}
+                  {t.net_amount != null && (
+                    <div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 2 }}>NET AMOUNT</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-primary)' }}>₹{fmt(t.net_amount)}</div>
+                    </div>
+                  )}
+                  {t.settled_at && (
+                    <div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 2 }}>SETTLED AT</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-primary)' }}>{fmtDateTime(t.settled_at)}</div>
+                    </div>
+                  )}
+                  {t.initiated_by && (
+                    <div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 2 }}>INITIATED BY</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-primary)', textTransform: 'capitalize' }}>{t.initiated_by}</div>
+                    </div>
+                  )}
+                  {receiptUrl && (
+                    <div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 2 }}>RECEIPT</div>
+                      <a
+                        href={receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: '#3b82f6', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+                      >
+                        📄 View Receipt →
+                      </a>
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 2 }}>TXN ID</div>
+                    <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', opacity: 0.6 }}>{t.transaction_id.slice(0, 20)}…</div>
+                  </div>
                 </div>
               )}
             </div>
-
-            {/* Date */}
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{fmtDateTime(t.created_at)}</div>
-
-            {/* Amount */}
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: txnTypeColor(t.transaction_type) }}>
-                {t.transaction_type === 'refund' || t.transaction_type === 'credit' ? '+' : ''}₹{fmt(t.amount)}
-              </div>
-              {t.gateway_fee > 0 && <div style={{ fontSize: 9, color: 'var(--text-secondary)' }}>fee ₹{fmt(t.gateway_fee)}</div>}
-            </div>
-
-            {/* Status */}
-            <Badge label={t.status} color={statusColor(t.status)} />
-          </div>
-        ))}
+          )
+        })}
         {transactions.length === 0 && <EmptyMsg>No transactions found.</EmptyMsg>}
       </div>
     </div>

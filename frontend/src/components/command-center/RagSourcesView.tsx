@@ -50,7 +50,7 @@ function PassageCard({ passage, index }: { passage: RagPassage; index: number })
     : 'var(--text-muted)'
 
   const categoryColors: Record<string, string> = {
-    billing: 'rgba(59,130,246,0.15)',
+    billing: 'rgba(15,118,110,0.12)',
     technical: 'rgba(251,191,36,0.15)',
     sales: 'rgba(167,139,250,0.15)',
     account: 'rgba(56,189,248,0.15)',

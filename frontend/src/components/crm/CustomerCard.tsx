@@ -15,10 +15,10 @@ interface Props {
 }
 
 const TIER_COLOR: Record<string, { bg: string; color: string; border: string }> = {
-  platinum: { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6', border: 'rgba(139,92,246,0.3)' },
-  gold:     { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
-  silver:   { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6', border: 'rgba(59,130,246,0.3)' },
-  standard: { bg: 'rgba(71,85,105,0.12)',  color: '#94a3b8', border: 'rgba(71,85,105,0.3)' },
+  elite:   { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6', border: 'rgba(139,92,246,0.3)' },
+  premium: { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+  gold:    { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6', border: 'rgba(59,130,246,0.3)' },
+  basic:   { bg: 'rgba(71,85,105,0.12)',  color: '#94a3b8', border: 'rgba(71,85,105,0.3)' },
 }
 
 function initials(name: string) {
@@ -35,8 +35,8 @@ function timeAgo(iso: string) {
 }
 
 export function CustomerCard({ customer, selected, onClick }: Props) {
-  const tier = customer.customer_tier?.toLowerCase() ?? 'standard'
-  const tierStyle = TIER_COLOR[tier] ?? TIER_COLOR.standard
+  const tier = customer.customer_tier?.toLowerCase() ?? 'basic'
+  const tierStyle = TIER_COLOR[tier] ?? TIER_COLOR.basic
 
   return (
     <button

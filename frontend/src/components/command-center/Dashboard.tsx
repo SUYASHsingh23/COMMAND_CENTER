@@ -335,7 +335,7 @@ function PanelTabs({ active, onSelect, session }: {
             color: active === tab.id ? 'var(--text-primary)' : 'var(--text-muted)',
             background: 'transparent',
             border: 'none',
-            borderBottom: active === tab.id ? '2px solid var(--accent-blue)' : '2px solid transparent',
+            borderBottom: active === tab.id ? '2px solid var(--accent-primary)' : '2px solid transparent',
             cursor: 'pointer',
             transition: 'all var(--transition-fast)',
             marginBottom: -1,
@@ -347,8 +347,8 @@ function PanelTabs({ active, onSelect, session }: {
               fontSize: 9,
               padding: '1px 5px',
               borderRadius: 10,
-              background: 'rgba(59,130,246,0.2)',
-              color: 'var(--accent-blue)',
+              background: 'rgba(15,118,110,0.15)',
+              color: 'var(--accent-primary)',
               fontWeight: 700,
               minWidth: 16,
               textAlign: 'center',
@@ -412,57 +412,57 @@ function Sidebar({ sessions, activeId, onSelect }: {
           display: 'block',
           textAlign: 'center',
           padding: '8px',
-          background: 'rgba(139,92,246,0.08)',
-          border: '1px solid rgba(139,92,246,0.2)',
+          background: 'rgba(15,118,110,0.08)',
+          border: '1px solid rgba(15,118,110,0.18)',
           borderRadius: 'var(--radius-md)',
-          color: 'var(--accent-purple)',
+          color: 'var(--accent-primary)',
           fontSize: 11,
           fontWeight: 600,
           textDecoration: 'none',
         }}>
-          📇 CRM System
+          🛁 Policy Holders
         </a>
         <a href="/billing" style={{
           display: 'block',
           textAlign: 'center',
           padding: '8px',
-          background: 'rgba(245,158,11,0.08)',
-          border: '1px solid rgba(245,158,11,0.2)',
+          background: 'rgba(180,83,9,0.08)',
+          border: '1px solid rgba(180,83,9,0.18)',
           borderRadius: 'var(--radius-md)',
-          color: '#f59e0b',
+          color: 'var(--accent-amber)',
           fontSize: 11,
           fontWeight: 600,
           textDecoration: 'none',
         }}>
-          💳 Billing System
+          💳 Premium &amp; Claims
         </a>
         <a href="/scheduling" style={{
           display: 'block',
           textAlign: 'center',
           padding: '8px',
-          background: 'rgba(16,185,129,0.08)',
-          border: '1px solid rgba(16,185,129,0.2)',
+          background: 'rgba(21,128,61,0.08)',
+          border: '1px solid rgba(21,128,61,0.18)',
           borderRadius: 'var(--radius-md)',
-          color: '#10b981',
+          color: 'var(--accent-green)',
           fontSize: 11,
           fontWeight: 600,
           textDecoration: 'none',
         }}>
-          📅 Scheduling
+          🗓 Surveyor Scheduling
         </a>
         <a href="/" style={{
           display: 'block',
           textAlign: 'center',
           padding: '8px',
-          background: 'rgba(59,130,246,0.08)',
-          border: '1px solid rgba(59,130,246,0.2)',
+          background: 'rgba(29,111,164,0.08)',
+          border: '1px solid rgba(29,111,164,0.18)',
           borderRadius: 'var(--radius-md)',
           color: 'var(--accent-blue)',
           fontSize: 11,
           fontWeight: 600,
           textDecoration: 'none',
         }}>
-          ← Voice Agent
+          ← Policy Holder Portal
         </a>
       </div>
     </div>
@@ -475,8 +475,8 @@ function SessionCard({ session, selected, onClick }: {
   onClick: () => void
 }) {
   const sentColor = {
-    positive: '#34d399', neutral: '#60a5fa', frustrated: '#fbbf24', angry: '#f87171'
-  }[session.sentiment] ?? '#60a5fa'
+    positive: '#15803d', neutral: '#1d6fa4', frustrated: '#b45309', angry: '#c0392b'
+  }[session.sentiment] ?? '#1d6fa4'
 
   const isActive = session.status === 'active'
   const isEscalated = session.status === 'escalated'

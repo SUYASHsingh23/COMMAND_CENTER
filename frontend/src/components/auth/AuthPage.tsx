@@ -86,14 +86,13 @@ export function AuthPage() {
         <div style={styles.brand}>
           <div style={styles.logoRing}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="#3b82f6" strokeWidth="1.5" strokeLinejoin="round"/>
-              <path d="M2 17l10 5 10-5" stroke="#3b82f6" strokeWidth="1.5" strokeLinejoin="round"/>
-              <path d="M2 12l10 5 10-5" stroke="#06b6d4" strokeWidth="1.5" strokeLinejoin="round"/>
+              <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.5C16.5 22.15 20 17.25 20 12V6l-8-4z" fill="rgba(15,118,110,0.15)" stroke="#0f766e" strokeWidth="1.5" strokeLinejoin="round"/>
+              <path d="M9 12l2 2 4-4" stroke="#0f766e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
           <div>
-            <h1 style={styles.brandName}>Command Center</h1>
-            <p style={styles.brandSub}>AI-Powered Contact Center</p>
+            <h1 style={styles.brandName}>InsureAI</h1>
+            <p style={styles.brandSub}>AI-Powered Insurance Command Center</p>
           </div>
         </div>
 
@@ -142,7 +141,7 @@ export function AuthPage() {
               id={`${id}-email`}
               type="email"
               autoComplete="email"
-              placeholder="arjun@connectplus.in"
+              placeholder="arjun@insureai.in"
               value={email}
               onChange={e => setEmail(e.target.value)}
               style={{ ...styles.input, ...(errors.email ? styles.inputError : {}) }}
@@ -261,8 +260,8 @@ export function AuthPage() {
           <div style={{
             marginTop: '16px',
             padding: '12px 14px',
-            background: 'rgba(59,130,246,0.06)',
-            border: '1px solid rgba(59,130,246,0.2)',
+            background: 'rgba(15,118,110,0.05)',
+            border: '1px solid rgba(15,118,110,0.18)',
             borderRadius: '10px',
             fontSize: '11px',
             color: 'var(--text-muted)',
@@ -270,7 +269,7 @@ export function AuthPage() {
             maxHeight: '180px',
             overflowY: 'auto',
           }}>
-            <div style={{ fontWeight: 600, color: 'var(--accent-blue)', marginBottom: '8px', fontSize: '12px', position: 'sticky', top: 0, paddingBottom: '4px', zIndex: 1, borderBottom: '1px solid var(--border-subtle)' }}>🔑 Available Customers</div>
+            <div style={{ fontWeight: 600, color: 'var(--accent-primary)', marginBottom: '8px', fontSize: '12px', position: 'sticky', top: 0, paddingBottom: '4px', zIndex: 1, borderBottom: '1px solid var(--border-subtle)', background: 'rgba(250,248,245,0.95)' }}>🔑 Policy Holder Accounts</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {[
                 { name: 'Anita Desai', email: 'anita.desai@example.com', pass: 'AnitaPass123!' },
@@ -321,34 +320,34 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'var(--bg-primary)',
+    background: 'linear-gradient(135deg, #fef9f0 0%, #f7f5f2 50%, #f0ebe2 100%)',
     position: 'relative',
     overflow: 'hidden',
     padding: '24px',
   },
   orb1: {
     position: 'absolute', top: '-120px', left: '-120px', width: '480px', height: '480px',
-    borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)',
+    borderRadius: '50%', background: 'radial-gradient(circle, rgba(15,118,110,0.08) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   orb2: {
     position: 'absolute', bottom: '-80px', right: '-80px', width: '400px', height: '400px',
-    borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.10) 0%, transparent 70%)',
+    borderRadius: '50%', background: 'radial-gradient(circle, rgba(180,83,9,0.07) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   orb3: {
     position: 'absolute', top: '40%', left: '60%', width: '300px', height: '300px',
-    borderRadius: '50%', background: 'radial-gradient(circle, rgba(6,182,212,0.07) 0%, transparent 70%)',
+    borderRadius: '50%', background: 'radial-gradient(circle, rgba(29,111,164,0.05) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   card: {
     position: 'relative', zIndex: 1,
     width: '100%', maxWidth: '440px',
-    background: 'var(--bg-card)',
+    background: '#ffffff',
     border: '1px solid var(--border)',
     borderRadius: '20px',
     padding: '40px 36px',
-    boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+    boxShadow: '0 8px 40px rgba(120,113,108,0.14)',
     animation: 'fade-in 300ms ease forwards',
   },
   brand: {
@@ -357,8 +356,8 @@ const styles: Record<string, React.CSSProperties> = {
   logoRing: {
     width: '52px', height: '52px',
     borderRadius: '14px',
-    background: 'rgba(59,130,246,0.10)',
-    border: '1px solid rgba(59,130,246,0.25)',
+    background: 'rgba(15,118,110,0.08)',
+    border: '1px solid rgba(15,118,110,0.20)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
   },
@@ -367,8 +366,8 @@ const styles: Record<string, React.CSSProperties> = {
 
   tabBar: {
     display: 'flex', gap: '4px',
-    background: 'var(--bg-secondary)',
-    border: '1px solid var(--border-subtle)',
+    background: 'var(--border-subtle)',
+    border: '1px solid var(--border)',
     borderRadius: '10px',
     padding: '4px',
     marginBottom: '28px',
@@ -380,9 +379,10 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 200ms ease',
   },
   tabActive: {
-    background: 'var(--bg-elevated)',
-    color: 'var(--text-primary)',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+    background: '#ffffff',
+    color: 'var(--accent-primary)',
+    boxShadow: '0 1px 4px rgba(120,113,108,0.12)',
+    fontWeight: 600,
   },
 
   form: { display: 'flex', flexDirection: 'column', gap: '18px' },
@@ -391,7 +391,7 @@ const styles: Record<string, React.CSSProperties> = {
   optional: { fontWeight: 400, color: 'var(--text-muted)' },
   input: {
     width: '100%', padding: '11px 14px',
-    background: 'var(--bg-secondary)',
+    background: 'var(--bg-primary)',
     border: '1px solid var(--border)',
     borderRadius: '9px',
     color: 'var(--text-primary)',
@@ -423,14 +423,14 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: '4px',
     padding: '13px',
     borderRadius: '10px',
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+    background: 'linear-gradient(135deg, #0f766e 0%, #0d5f58 100%)',
     color: '#fff',
     fontSize: '15px', fontWeight: 600,
     border: 'none', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     minHeight: '48px',
     transition: 'opacity 200ms, transform 100ms',
-    boxShadow: '0 4px 16px rgba(59,130,246,0.3)',
+    boxShadow: '0 4px 16px rgba(15,118,110,0.25)',
   },
   submitBtnLoading: { opacity: 0.7, cursor: 'not-allowed' },
   spinner: {
@@ -444,6 +444,6 @@ const styles: Record<string, React.CSSProperties> = {
   switchText: { marginTop: '20px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' },
   switchLink: {
     background: 'none', border: 'none', cursor: 'pointer',
-    color: 'var(--accent-blue)', fontWeight: 500, fontSize: '13px', padding: 0,
+    color: 'var(--accent-primary)', fontWeight: 500, fontSize: '13px', padding: 0,
   },
 }

@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import type { SupervisorSession } from '@/store/supervisor'
 
 interface Props {
@@ -64,8 +64,8 @@ export function MemoryPanel({ session }: Props) {
                 {session.intents.map((intent) => (
                   <span key={intent} style={{
                     fontSize: 10, padding: '2px 8px', borderRadius: 12,
-                    background: 'rgba(139,92,246,0.12)', color: '#a78bfa',
-                    border: '1px solid rgba(139,92,246,0.25)',
+                    background: 'rgba(15,118,110,0.10)', color: 'var(--accent-primary)',
+                    border: '1px solid rgba(15,118,110,0.22)',
                   }}>
                     {intent.replace(/_/g, ' ')}
                   </span>

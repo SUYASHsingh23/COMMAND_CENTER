@@ -1,10 +1,10 @@
 """
-seed_full_data.py — Populate complete, realistic data for all 10 customers.
+seed_full_data.py — Populate complete, realistic data for all 10 InsureAI policy-holders.
 
 Fixes:
-1. Fills in missing city/state/customer_since on existing customers
-2. Adds 3 invoices per customer (paid, pending, overdue) — realistic Indian telecom billing
-3. Adds appointments for customers that don't have one
+1. Fills in missing city/state/customer_since on existing policy-holders
+2. Adds 3 premium invoices per policy-holder (paid, pending, overdue) — realistic Indian insurance billing
+3. Adds appointments for policy-holders that don't have one
 4. All data is consistent with real DB schema (uses total_amount, not amount)
 
 Run: python seed_full_data.py
@@ -23,34 +23,36 @@ from app.models.scheduling import Appointment
 # ─── Customer enrichment data ──────────────────────────────────────────────────
 CUSTOMER_UPDATES = {
     # name -> {city, state, customer_since, tier}
-    "Anita Desai":   {"city": "Mumbai",    "state": "Maharashtra", "customer_since": date(2021, 3, 15), "customer_tier": "gold"},
-    "Priya Sharma":  {"city": "Delhi",     "state": "Delhi",       "customer_since": date(2020, 7, 1),  "customer_tier": "silver"},
-    "Rajan Mehta":   {"city": "Bangalore", "state": "Karnataka",   "customer_since": date(2019, 11, 20),"customer_tier": "gold"},
-    "Suresh Kumar":  {"city": "Chennai",   "state": "Tamil Nadu",  "customer_since": date(2022, 1, 10), "customer_tier": "standard"},
-    "Kavitha Nair":  {"city": "Kochi",     "state": "Kerala",      "customer_since": date(2020, 5, 5),  "customer_tier": "silver"},
-    "Amit Patel":    {"city": "Ahmedabad", "state": "Gujarat",     "customer_since": date(2023, 2, 28), "customer_tier": "standard"},
-    "Priya Nair":    {"city": "Kochi",     "state": "Kerala",      "customer_since": date(2021, 8, 14), "customer_tier": "silver"},
-    "Rahul Sharma":  {"city": "Pune",      "state": "Maharashtra", "customer_since": date(2022, 4, 1),  "customer_tier": "standard"},
-    "Sneha Reddy":   {"city": "Hyderabad", "state": "Telangana",   "customer_since": date(2023, 6, 15), "customer_tier": "standard"},
-    "Vikram Singh":  {"city": "Jaipur",    "state": "Rajasthan",   "customer_since": date(2021, 12, 1), "customer_tier": "silver"},
+    "Anita Desai":   {"city": "Mumbai",    "state": "Maharashtra", "customer_since": date(2021, 3, 15), "customer_tier": "premium"},
+    "Priya Sharma":  {"city": "Delhi",     "state": "Delhi",       "customer_since": date(2020, 7, 1),  "customer_tier": "gold"},
+    "Rajan Mehta":   {"city": "Bangalore", "state": "Karnataka",   "customer_since": date(2019, 11, 20),"customer_tier": "premium"},
+    "Suresh Kumar":  {"city": "Chennai",   "state": "Tamil Nadu",  "customer_since": date(2022, 1, 10), "customer_tier": "basic"},
+    "Kavitha Nair":  {"city": "Kochi",     "state": "Kerala",      "customer_since": date(2020, 5, 5),  "customer_tier": "gold"},
+    "Amit Patel":    {"city": "Ahmedabad", "state": "Gujarat",     "customer_since": date(2023, 2, 28), "customer_tier": "basic"},
+    "Priya Nair":    {"city": "Kochi",     "state": "Kerala",      "customer_since": date(2021, 8, 14), "customer_tier": "gold"},
+    "Rahul Sharma":  {"city": "Pune",      "state": "Maharashtra", "customer_since": date(2022, 4, 1),  "customer_tier": "basic"},
+    "Sneha Reddy":   {"city": "Hyderabad", "state": "Telangana",   "customer_since": date(2023, 6, 15), "customer_tier": "basic"},
+    "Vikram Singh":  {"city": "Jaipur",    "state": "Rajasthan",   "customer_since": date(2021, 12, 1), "customer_tier": "gold"},
 }
 
-# ─── Invoice templates per plan ─────────────────────────────────────────────────
-# format: (subtotal, tax_rate, plan_label)
+# ─── Insurance Premium templates per policy ───────────────────────────────────
+# format: (subtotal, tax_rate)
+# GST at 18% on insurance premiums
 PLAN_BILLING = {
-    "Fiber 200Mbps":            (849.0,  18.0),
-    "Fiber 100Mbps":            (599.0,  18.0),
-    "ConnectPlus Basic":        (399.0,  18.0),
-    "ConnectPlus Mobile Premium": (699.0, 18.0),
-    "ConnectPlus Fiber 300":    (999.0,  18.0),
-    "Mobile Basic":             (299.0,  18.0),
-    "Fiber Elite 500":          (1299.0, 18.0),
+    "Health Shield Basic":      (3999.0,  18.0),
+    "Health Shield Gold":       (7499.0,  18.0),
+    "Health Shield Premium":    (14999.0, 18.0),
+    "Motor Comprehensive":      (8999.0,  18.0),
+    "Motor Third Party":        (2499.0,  18.0),
+    "Motor Comprehensive Plus": (11999.0, 18.0),
+    "Home Protector Basic":     (4999.0,  18.0),
+    "Home Protector Elite":     (8499.0,  18.0),
 }
 
 today = date.today()
 
 
-def make_invoice(customer_id_str, account_id_str, invoice_num, period_months_ago, status, plan="Fiber 200Mbps"):
+def make_invoice(customer_id_str, account_id_str, invoice_num, period_months_ago, status, plan="Health Shield Basic"):
     """Create an Invoice ORM object for a given billing period."""
     cid = uuid.UUID(customer_id_str)
     aid = uuid.UUID(account_id_str)
@@ -99,7 +101,7 @@ def make_invoice(customer_id_str, account_id_str, invoice_num, period_months_ago
         total_amount=total,
         amount_paid=amount_paid,
         currency="INR",
-        line_items=[{"description": f"{plan} monthly subscription", "amount": float(subtotal)}],
+        line_items=[{"description": f"{plan} insurance premium — quarterly", "amount": float(subtotal)}],
         sent_via="email",
         sent_at=datetime(issue.year, issue.month, issue.day, 9, 0, tzinfo=timezone.utc),
         paid_at=paid_at,
@@ -138,8 +140,8 @@ async def seed():
                 if not c.customer_since:
                     c.customer_since = updates["customer_since"]
                     changed.append(f"since={c.customer_since}")
-                if not c.customer_tier or c.customer_tier == "standard":
-                    c.customer_tier = updates.get("customer_tier", "standard")
+                if not c.customer_tier or c.customer_tier == "basic":
+                    c.customer_tier = updates.get("customer_tier", "basic")
                     changed.append(f"tier={c.customer_tier}")
                 db.add(c)
                 if changed:
@@ -174,7 +176,7 @@ async def seed():
                 print(f"  {c.name}: no account found — skipping")
                 continue
 
-            plan = acct.plan_name or c.plan or "ConnectPlus Basic"
+            plan = acct.plan_name or c.plan or "Health Shield Basic"
             aid_str = str(acct.account_id)
             existing_months = {inv.billing_period_start.month for inv in existing if inv.billing_period_start}
             added = 0
@@ -183,7 +185,7 @@ async def seed():
             candidates = [
                 (2, "paid"),
                 (1, "sent"),
-                (0, "overdue" if c.customer_tier == "standard" else "partial"),
+                (0, "overdue" if c.customer_tier in ("basic", "standard") else "partial"),
             ]
             for months_ago, status in candidates:
                 period_start = date(today.year, today.month, 1) - timedelta(days=30 * months_ago)
@@ -223,16 +225,16 @@ async def seed():
             appt_counter = len(appt_rows) + 1
 
             APPT_REASONS = {
-                "Anita Desai":   ("Billing query for overdue invoice", "billing", "medium"),
-                "Priya Sharma":  ("Internet speed below subscribed plan", "technical", "high"),
-                "Rajan Mehta":   ("Plan upgrade consultation", "sales", "low"),
-                "Suresh Kumar":  ("New connection installation request", "installation", "medium"),
-                "Kavitha Nair":  ("Payment confirmation after UPI transfer", "billing", "low"),
-                "Amit Patel":    ("Service restoration after payment", "billing", "urgent"),
-                "Priya Nair":    ("Retention — considering cancellation", "retention", "high"),
-                "Rahul Sharma":  ("WiFi router replacement", "technical", "medium"),
-                "Sneha Reddy":   ("Data pack add-on request", "sales", "low"),
-                "Vikram Singh":  ("Account migration to new address", "account", "medium"),
+                "Anita Desai":   ("Health claim reimbursement follow-up", "billing", "high"),
+                "Priya Sharma":  ("Motor insurance renewal inquiry", "sales", "medium"),
+                "Rajan Mehta":   ("Home insurance coverage enhancement", "sales", "low"),
+                "Suresh Kumar":  ("New health policy enrollment assistance", "sales", "medium"),
+                "Kavitha Nair":  ("Premium payment confirmation after UPI transfer", "billing", "low"),
+                "Amit Patel":    ("Cashless hospitalization claim assistance", "billing", "urgent"),
+                "Priya Nair":    ("Policy surrender — considering cancellation", "retention", "high"),
+                "Rahul Sharma":  ("Motor vehicle surveyor visit scheduling", "technical", "medium"),
+                "Sneha Reddy":   ("Add-on rider request for health policy", "sales", "low"),
+                "Vikram Singh":  ("Home insurance claim for water damage", "billing", "medium"),
             }
 
             for c in cust_rows:
@@ -271,7 +273,7 @@ async def seed():
                         "phone": c.phone,
                         "customer_id": str(c.customer_id),
                         "account_number": c.account_number,
-                        "customer_tier": c.customer_tier or "standard",
+                        "customer_tier": c.customer_tier or "basic",
                     },
                     billing_snapshot={},
                     conversation_transcript=[],

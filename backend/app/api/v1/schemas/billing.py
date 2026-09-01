@@ -23,8 +23,6 @@ class BillingPlanOut(BaseModel):
     currency: str
     tax_rate_pct: Decimal
     setup_fee: Decimal
-    data_cap_gb: Optional[Decimal]
-    speed_mbps: Optional[int]
     min_contract_months: int
     trial_days: int
     is_active: bool

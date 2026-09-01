@@ -351,8 +351,9 @@ async def create_appointment(payload: AppointmentCreate, db: AsyncSession = Depe
         ai_risk_flags.append({"flag": "multiple_payment_failures", "value": bill_snap["failed_transactions"]})
     if payload.urgency_signal in ("angry", "distressed"):
         ai_risk_flags.append({"flag": "distressed_customer", "value": payload.urgency_signal})
-    if cust_snap.get("customer_tier") == "platinum":
-        ai_risk_flags.append({"flag": "vip_customer", "value": "platinum", "label": "Handle with priority"})
+    if cust_snap.get("customer_tier") in ("premium", "elite"):
+        tier_val = cust_snap.get("customer_tier", "premium")
+        ai_risk_flags.append({"flag": "vip_customer", "value": tier_val, "label": "Priority policyholder — escalate if needed"})
 
     # Build AI suggested actions
     ai_suggested_actions: list[dict] = []
@@ -361,8 +362,8 @@ async def create_appointment(payload: AppointmentCreate, db: AsyncSession = Depe
             ai_suggested_actions.append({"action": "Review outstanding balance and overdue invoices", "priority": "high"})
         ai_suggested_actions.append({"action": "Offer payment plan if customer is struggling", "priority": "medium"})
     elif payload.intent_category == "technical":
-        ai_suggested_actions.append({"action": "Check NOC for active tickets affecting this account", "priority": "high"})
-        ai_suggested_actions.append({"action": "Verify last speed test / signal report", "priority": "medium"})
+        ai_suggested_actions.append({"action": "Review active policy coverage and exclusions with customer", "priority": "high"})
+        ai_suggested_actions.append({"action": "Check pending or past claim history before resolving", "priority": "medium"})
     ai_suggested_actions.append({"action": "Confirm customer identity (DOB / account number)", "priority": "high"})
 
     ai_summary = _build_ai_summary(

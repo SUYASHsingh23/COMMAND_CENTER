@@ -8,20 +8,20 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-EXTRACTION_PROMPT = """You are an intent and entity extraction engine for a telecom customer service system.
+EXTRACTION_PROMPT = """You are an intent and entity extraction engine for an insurance customer service system (InsureAI).
 
 Given a customer utterance, extract:
 - intents: list of detected intents (use snake_case). Choose from:
-  technical_issue, billing_inquiry, billing_dispute, refund_request, plan_upgrade,
-  plan_downgrade, cancellation_request, account_inquiry, complaint, general_inquiry,
-  schedule_engineer, check_outage, verify_account
-- entities: dict of key entities (service, account_number, amount, invoice_id, date, plan_name, issue_type)
+  claim_inquiry, claim_filing, claim_status, billing_inquiry, billing_dispute, refund_request,
+  policy_renewal, policy_upgrade, policy_cancellation, coverage_inquiry, account_inquiry,
+  surveyor_request, complaint, general_inquiry, verify_account, payment_inquiry
+- entities: dict of key entities (policy_number, claim_id, coverage_type, account_number, amount, invoice_id, date, plan_name, issue_type)
 - sentiment: one of positive | neutral | frustrated | angry
 - urgency: one of low | medium | high
 - confidence: float 0.0-1.0
 
 Respond ONLY with valid JSON. No prose, no markdown.
-Example: {"intents": ["billing_dispute", "refund_request"], "entities": {"amount": "500", "invoice_id": "INV-2024-001"}, "sentiment": "frustrated", "urgency": "high", "confidence": 0.92}"""
+Example: {"intents": ["billing_dispute", "refund_request"], "entities": {"amount": "5000", "invoice_id": "INV-2024-001", "coverage_type": "health"}, "sentiment": "frustrated", "urgency": "high", "confidence": 0.92}"""
 
 
 def _extract_json(text: str) -> dict:

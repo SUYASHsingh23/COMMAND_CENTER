@@ -15,6 +15,9 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
+import os
+import re
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,115 +29,10 @@ from app.orchestrator.rag.embedder import TextEmbedder
 logger = logging.getLogger(__name__)
 
 # ─── Knowledge base documents ─────────────────────────────────────────────────
-# Replace / extend these entries for any domain (telecom, insurance, IT, etc.)
+# InsureAI — Insurance knowledge base covering Health, Home, and Motor insurance.
 # Each entry: title, category, content (plain text; will be auto-chunked).
-KNOWLEDGE_BASE = [
-    {
-        "title": "Refund Policy",
-        "category": "billing",
-        "content": (
-            "ConnectPlus offers full refunds within 7 days of billing for incorrect charges. "
-            "Refunds for service outages exceeding 24 hours are automatically credited. "
-            "Disputed amounts above INR 5000 require supervisor approval. "
-            "Refunds are processed within 3-5 business days to the original payment method."
-        ),
-    },
-    {
-        "title": "Service Outage Compensation",
-        "category": "billing",
-        "content": (
-            "Customers experiencing verified service outages exceeding 4 hours receive automatic bill credit. "
-            "Credits equal one day of service charges per 4-hour outage block. "
-            "Outage compensation is applied to the next billing cycle. "
-            "Customers can call support to request manual credit if auto-credit is not applied within 72 hours."
-        ),
-    },
-    {
-        "title": "Plan Upgrade Process",
-        "category": "sales",
-        "content": (
-            "Customers can upgrade their plan at any time. The new plan takes effect within 2 hours of confirmation. "
-            "Pro-rated billing applies — the customer pays only for the days at each plan level. "
-            "No additional fees are charged for upgrades. "
-            "Customers can downgrade once per billing cycle without penalty."
-        ),
-    },
-    {
-        "title": "Cancellation Policy",
-        "category": "sales",
-        "content": (
-            "ConnectPlus requires 30 days notice for service cancellation. "
-            "Early termination fees apply for customers within the minimum contract period: "
-            "INR 2000 for broadband, INR 1000 for mobile. "
-            "Customers who cancel due to service quality issues within 30 days of activation "
-            "are exempt from termination fees. Equipment must be returned within 14 days."
-        ),
-    },
-    {
-        "title": "Technical Support SLA",
-        "category": "technical",
-        "content": (
-            "Critical technical issues (no service) are resolved within 4 hours. "
-            "High priority issues (degraded service) are resolved within 8 hours. "
-            "Standard tickets are resolved within 48 hours. "
-            "Field engineer visits can be scheduled for next-business-day for most areas. "
-            "Remote diagnostics are attempted first before field visits."
-        ),
-    },
-    {
-        "title": "Router and Equipment Policy",
-        "category": "technical",
-        "content": (
-            "ConnectPlus provides routers on a rental basis at INR 200 per month. "
-            "Customers experiencing hardware failure receive a replacement within 24 hours. "
-            "Customer-caused damage voids the replacement guarantee. "
-            "Customers who own their equipment must ensure compatibility with ConnectPlus "
-            "network standards (DOCSIS 3.1 or higher for broadband)."
-        ),
-    },
-    {
-        "title": "Billing Dispute Resolution",
-        "category": "billing",
-        "content": (
-            "Customers disputing a charge must contact support within 60 days of the invoice date. "
-            "Dispute investigations are completed within 7 business days. "
-            "Disputed amounts are suspended from collections during investigation. "
-            "If the dispute is resolved in favor of the customer, the credit appears within 2 billing cycles. "
-            "Customers receive written resolution notices."
-        ),
-    },
-    {
-        "title": "Data and Speed Policy",
-        "category": "technical",
-        "content": (
-            "ConnectPlus Fiber 200 provides up to 200 Mbps download and 100 Mbps upload. "
-            "Fiber 500 provides up to 500 Mbps download and 250 Mbps upload. "
-            "Basic plan provides up to 50 Mbps download. "
-            "During peak hours (6PM-11PM), speeds may be up to 20% lower due to network congestion management. "
-            "Fair Usage Policy applies above 1TB monthly data."
-        ),
-    },
-    {
-        "title": "Identity Verification Requirements",
-        "category": "account",
-        "content": (
-            "Agents must verify customer identity before discussing account details, billing, or making changes. "
-            "Verification requires any two of: registered phone number, account number, registered email, "
-            "or last 4 digits of Aadhaar. "
-            "Failed verification after 3 attempts triggers a security hold requiring in-store verification."
-        ),
-    },
-    {
-        "title": "Auto-Pay and Payment Methods",
-        "category": "billing",
-        "content": (
-            "ConnectPlus accepts UPI, credit cards, debit cards, net banking, and cheques. "
-            "Auto-pay customers receive a 5% discount on monthly bills. "
-            "Auto-pay failures result in a 3-day grace period before service suspension. "
-            "Customers are notified via SMS and email before any service suspension."
-        ),
-    },
-]
+KNOWLEDGE_BASE = []
+
 
 # ─── Chunking config ──────────────────────────────────────────────────────────
 # chunk_size   : max characters per chunk (≈ 120 tokens for English text)
@@ -156,9 +54,45 @@ def _chunk_text(text: str, title: str) -> list[str]:
     return chunks if chunks else [text]
 
 
+def _load_markdown_policies() -> list[dict]:
+    docs = []
+    # Path relative to backend/app/orchestrator/rag/seeder.py -> backend/../knowledge/policies
+    base_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "knowledge" / "policies"
+    if not base_dir.exists():
+        logger.warning("Policy directory not found at %s", base_dir)
+        return docs
+    
+    for md_file in base_dir.glob("*.md"):
+        content = md_file.read_text(encoding="utf-8")
+        
+        # Split by "## " or "### "
+        sections = re.split(r'\n(#{2,3})\s', content)
+        
+        if sections[0].strip():
+            docs.append({
+                "title": f"{md_file.stem} - Introduction",
+                "category": "policy",
+                "content": sections[0].strip()
+            })
+            
+        for i in range(1, len(sections), 2):
+            body = sections[i+1]
+            lines = body.split('\n', 1)
+            title = lines[0].strip()
+            text = lines[1].strip() if len(lines) > 1 else ""
+            
+            if text:
+                docs.append({
+                    "title": title,
+                    "category": "policy",
+                    "content": text
+                })
+                
+    return docs
+
 async def seed_knowledge_base(db: AsyncSession) -> int:
     """
-    Ingest all KNOWLEDGE_BASE entries into ChromaDB.
+    Ingest all KNOWLEDGE_BASE entries and Markdown policies into ChromaDB.
 
     Returns:
         Number of newly seeded documents (0 if all already indexed).
@@ -167,9 +101,17 @@ async def seed_knowledge_base(db: AsyncSession) -> int:
     collection = _get_collection()
     embedder = TextEmbedder()
     seeded = 0
+    seen_hashes = set()
 
-    for item in KNOWLEDGE_BASE:
+    dynamic_docs = _load_markdown_policies()
+    all_docs = KNOWLEDGE_BASE + dynamic_docs
+
+    for item in all_docs:
         content_hash = hashlib.sha256(item["content"].encode()).hexdigest()
+
+        if content_hash in seen_hashes:
+            continue
+        seen_hashes.add(content_hash)
 
         # Check if already indexed in PostgreSQL audit table
         existing = await db.execute(

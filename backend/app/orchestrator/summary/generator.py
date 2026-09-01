@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 SUMMARY_SYSTEM = (
-    "You are a call summary engine for an enterprise telecom CRM system (ConnectPlus). "
-    "Given a conversation between a customer and an AI agent, produce a structured, detailed summary.\n\n"
+    "You are a call summary engine for an enterprise insurance CRM system (InsureAI). "
+    "Given a conversation between a policy-holder and an AI agent, produce a structured, detailed summary.\n\n"
     "Your summary must cover:\n"
-    "1. What the customer called about (primary issue / request)\n"
-    "2. What information was gathered or verified (account details, invoice data, identity)\n"
-    "3. What actions were taken (refunds issued with reference numbers, tickets created, updates made, escalations raised)\n"
-    "4. What the final outcome was for the customer (resolved, unresolved, pending review, escalated to human)\n\n"
+    "1. What the policy-holder called about (primary issue / request — e.g. claim inquiry, premium refund, policy renewal)\n"
+    "2. What information was gathered or verified (policy details, invoice data, coverage type, identity)\n"
+    "3. What actions were taken (refunds issued with reference numbers, tickets created, surveyor scheduled, escalations raised)\n"
+    "4. What the final outcome was for the policy-holder (resolved, unresolved, pending review, escalated to claims specialist)\n\n"
     "Write 3-5 clear sentences. Be specific: include reference numbers, amounts, invoice IDs if mentioned. "
     "Avoid vague phrases like 'the agent handled the request'. "
     "Then classify: resolved | partially_resolved | unresolved | escalated.\n\n"

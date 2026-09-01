@@ -82,16 +82,16 @@ export function VoiceInterface() {
       }}>
         <div style={{
           fontSize: 11,
-          color: 'var(--accent-blue)',
+          color: 'var(--accent-primary)',
           fontWeight: 600,
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
           marginBottom: 2,
         }}>
-          Command Center
+          InsureAI
         </div>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-          AI Voice Agent
+          AI Claims &amp; Policy Agent
         </h1>
       </div>
 
@@ -133,8 +133,8 @@ export function VoiceInterface() {
                 borderRadius: '50%',
                 border: 'none',
                 cursor: isConnecting ? 'not-allowed' : 'pointer',
-                background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                boxShadow: '0 0 28px rgba(59,130,246,0.35), var(--shadow-md)',
+                background: 'linear-gradient(135deg, #0f766e, #0d5f58)',
+                boxShadow: '0 0 28px rgba(15,118,110,0.28), var(--shadow-md)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -153,8 +153,8 @@ export function VoiceInterface() {
               <div style={{
                 width: '100%',
                 padding: '10px 14px',
-                background: 'rgba(239,68,68,0.08)',
-                border: '1px solid rgba(239,68,68,0.25)',
+                background: 'rgba(192,57,43,0.08)',
+                border: '1px solid rgba(192,57,43,0.22)',
                 borderRadius: 'var(--radius-md)',
                 color: 'var(--accent-red)',
                 fontSize: 13,
@@ -253,7 +253,7 @@ export function VoiceInterface() {
                     padding: '8px 12px',
                     borderRadius: 'var(--radius-md)',
                     border: 'none',
-                    background: textInput.trim() ? 'var(--accent-blue)' : 'var(--bg-primary)',
+                    background: textInput.trim() ? 'var(--accent-primary)' : 'var(--border-subtle)',
                     color: textInput.trim() ? 'white' : 'var(--text-muted)',
                     cursor: textInput.trim() ? 'pointer' : 'not-allowed',
                     fontSize: 13,
@@ -373,14 +373,14 @@ function PTTButton({ isSpeaking, onStart, onStop }: PTTButtonProps) {
           width: 80,
           height: 80,
           borderRadius: '50%',
-          border: `3px solid ${isSpeaking ? 'rgba(16,185,129,0.8)' : 'rgba(99,102,241,0.4)'}`,
+          border: `3px solid ${isSpeaking ? 'rgba(21,128,61,0.7)' : 'rgba(15,118,110,0.35)'}`,
           cursor: 'pointer',
           background: isSpeaking
-            ? 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(5,150,105,0.3))'
-            : 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(67,56,202,0.15))',
+            ? 'linear-gradient(135deg, rgba(21,128,61,0.15), rgba(4,120,87,0.25))'
+            : 'linear-gradient(135deg, rgba(15,118,110,0.08), rgba(13,95,88,0.12))',
           boxShadow: isSpeaking
-            ? '0 0 30px rgba(16,185,129,0.5), inset 0 0 15px rgba(16,185,129,0.1)'
-            : '0 0 15px rgba(99,102,241,0.2)',
+            ? '0 0 30px rgba(21,128,61,0.35), inset 0 0 15px rgba(21,128,61,0.08)'
+            : '0 0 15px rgba(15,118,110,0.15)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -455,7 +455,7 @@ function MicIcon() {
 
 function MicLargeIcon() {
   return (
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="rgba(99,102,241,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="rgba(15,118,110,0.85)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
       <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
       <line x1="12" y1="19" x2="12" y2="23"/>

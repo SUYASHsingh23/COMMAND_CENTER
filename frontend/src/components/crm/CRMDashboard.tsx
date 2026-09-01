@@ -93,10 +93,10 @@ interface CRMStats {
 const getApiBase = () => `http://${window.location.hostname}:8000/api/v1`
 
 const TIER_COLOR: Record<string, { bg: string; color: string }> = {
-  platinum: { bg: 'rgba(139,92,246,0.15)', color: '#8b5cf6' },
-  gold:     { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
-  silver:   { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
-  standard: { bg: 'rgba(71,85,105,0.15)',  color: '#94a3b8' },
+  elite:   { bg: 'rgba(139,92,246,0.15)', color: '#8b5cf6' },
+  premium: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
+  gold:    { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
+  basic:   { bg: 'rgba(71,85,105,0.15)',  color: '#94a3b8' },
 }
 
 const ACCOUNT_STATUS_COLOR: Record<string, string> = {
@@ -284,10 +284,10 @@ export function CRMDashboard() {
               }}
             >
               <option value="">All tiers</option>
-              <option value="platinum">Platinum</option>
+              <option value="elite">Elite</option>
+              <option value="premium">Premium</option>
               <option value="gold">Gold</option>
-              <option value="silver">Silver</option>
-              <option value="standard">Standard</option>
+              <option value="basic">Basic</option>
             </select>
           </div>
 
@@ -399,11 +399,11 @@ function TopBar({ stats, onCreateClick }: { stats: CRMStats | null; onCreateClic
         <div style={{ display: 'flex', gap: 12 }}>
           <StatChip label="Customers" value={String(stats.total_customers)} color="var(--accent-blue)" />
           <StatChip label="Active Accounts" value={String(stats.active_accounts)} color="var(--accent-green)" />
-          {stats.tier_distribution.platinum > 0 && (
-            <StatChip label="Platinum" value={String(stats.tier_distribution.platinum)} color="#8b5cf6" />
+          {stats.tier_distribution.elite > 0 && (
+            <StatChip label="Elite" value={String(stats.tier_distribution.elite)} color="#8b5cf6" />
           )}
-          {stats.tier_distribution.gold > 0 && (
-            <StatChip label="Gold" value={String(stats.tier_distribution.gold)} color="var(--accent-amber)" />
+          {stats.tier_distribution.premium > 0 && (
+            <StatChip label="Premium" value={String(stats.tier_distribution.premium)} color="var(--accent-amber)" />
           )}
         </div>
       )}
@@ -453,8 +453,8 @@ function CustomerProfileView({
   onPanelChange: (p: RightPanel) => void
   onNoteAdded: (n: Note) => void
 }) {
-  const tier = detail.customer_tier?.toLowerCase() ?? 'standard'
-  const tierStyle = TIER_COLOR[tier] ?? TIER_COLOR.standard
+  const tier = detail.customer_tier?.toLowerCase() ?? 'basic'
+  const tierStyle = TIER_COLOR[tier] ?? TIER_COLOR.basic
   const account = detail.accounts[0]
   const statusColor = account ? (ACCOUNT_STATUS_COLOR[account.status] ?? 'var(--text-muted)') : 'var(--text-muted)'
 
@@ -658,7 +658,7 @@ function CreateCustomerModal({
   const [form, setForm] = useState({
     name: '', phone: '', email: '', account_number: '',
     plan: '', city: '', state: '', pincode: '',
-    customer_tier: 'standard', preferred_language: 'en', preferred_channel: 'voice',
+    customer_tier: 'basic', preferred_language: 'en', preferred_channel: 'voice',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -723,7 +723,7 @@ function CreateCustomerModal({
               <ModalInput value={form.account_number} onChange={v => update('account_number', v)} placeholder="ACC-2024-001" mono />
             </ModalFieldRow>
             <ModalFieldRow label="Plan">
-              <ModalInput value={form.plan} onChange={v => update('plan', v)} placeholder="Fiber 200" />
+              <ModalInput value={form.plan} onChange={v => update('plan', v)} placeholder="Health Shield Basic" />
             </ModalFieldRow>
             <ModalFieldRow label="City">
               <ModalInput value={form.city} onChange={v => update('city', v)} placeholder="Mumbai" />
@@ -735,10 +735,10 @@ function CreateCustomerModal({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <ModalFieldRow label="Tier">
               <select value={form.customer_tier} onChange={e => update('customer_tier', e.target.value)} style={modalSelectStyle}>
-                <option value="standard">Standard</option>
-                <option value="silver">Silver</option>
+                <option value="basic">Basic</option>
                 <option value="gold">Gold</option>
-                <option value="platinum">Platinum</option>
+                <option value="premium">Premium</option>
+                <option value="elite">Elite</option>
               </select>
             </ModalFieldRow>
             <ModalFieldRow label="Channel">

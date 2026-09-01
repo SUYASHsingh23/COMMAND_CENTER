@@ -17,8 +17,8 @@ function LoadingScreen() {
     }}>
       <div style={{
         width: '36px', height: '36px',
-        border: '3px solid rgba(59,130,246,0.2)',
-        borderTopColor: '#3b82f6',
+        border: '3px solid rgba(15,118,110,0.15)',
+        borderTopColor: '#0f766e',
         borderRadius: '50%',
         animation: 'spin 0.7s linear infinite',
       }} />
@@ -33,15 +33,16 @@ function SupervisorNav() {
   const navStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: '4px',
     padding: '8px 16px',
-    background: 'var(--bg-secondary)',
-    borderBottom: '1px solid var(--border-subtle)',
+    background: '#ffffff',
+    borderBottom: '1px solid var(--border)',
     flexShrink: 0,
+    boxShadow: '0 1px 4px rgba(120,113,108,0.08)',
   }
   const linkStyle = (active: boolean): React.CSSProperties => ({
     padding: '6px 14px',
     borderRadius: '8px',
-    background: active ? 'rgba(59,130,246,0.15)' : 'transparent',
-    color: active ? 'var(--accent-blue)' : 'var(--text-secondary)',
+    background: active ? 'rgba(15,118,110,0.10)' : 'transparent',
+    color: active ? 'var(--accent-primary)' : 'var(--text-secondary)',
     fontSize: '13px',
     fontWeight: active ? 600 : 400,
     cursor: 'pointer',
@@ -53,13 +54,13 @@ function SupervisorNav() {
   const go = (url: string) => { window.location.href = url }
   return (
     <nav style={navStyle}>
-      <span style={{ fontWeight: 700, color: 'var(--accent-blue)', fontSize: '13px', marginRight: '8px', letterSpacing: '0.06em' }}>
-        🖥 SUPERVISOR
+      <span style={{ fontWeight: 700, color: 'var(--accent-primary)', fontSize: '13px', marginRight: '8px', letterSpacing: '0.06em' }}>
+        🛡 InsureAI Admin
       </span>
       <button style={linkStyle(path.startsWith('/supervisor'))} onClick={() => go('/supervisor')}>Dashboard</button>
-      <button style={linkStyle(path.startsWith('/crm'))} onClick={() => go('/crm')}>CRM</button>
-      <button style={linkStyle(path.startsWith('/billing'))} onClick={() => go('/billing')}>Billing</button>
-      <button style={linkStyle(path.startsWith('/scheduling'))} onClick={() => go('/scheduling')}>Scheduling</button>
+      <button style={linkStyle(path.startsWith('/crm'))} onClick={() => go('/crm')}>Policy Holders</button>
+      <button style={linkStyle(path.startsWith('/billing'))} onClick={() => go('/billing')}>Premium &amp; Claims</button>
+      <button style={linkStyle(path.startsWith('/scheduling'))} onClick={() => go('/scheduling')}>Surveyor Scheduling</button>
       <div style={{ flex: 1 }} />
       <button style={linkStyle(false)} onClick={() => go('/')}>← Customer Portal</button>
     </nav>
