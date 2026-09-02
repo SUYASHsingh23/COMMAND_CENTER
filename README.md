@@ -56,10 +56,10 @@ SECRET_KEY=supersecretkey_for_development_change_in_prod
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 
 # PostgreSQL Database
-DATABASE_URL=postgresql+asyncpg://postgres:12022026@localhost:5432/contact_center
-POSTGRES_URL=postgresql+asyncpg://postgres:12022026@localhost:5432/contact_center
+DATABASE_URL=postgresql+asyncpg://postgres:postgre@localhost:5432/contact_center
+POSTGRES_URL=postgresql+asyncpg://postgres:postgre@localhost:5432/contact_center
 DB_USER=postgres
-DB_PASSWORD=12022026
+DB_PASSWORD=postgre
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=contact_center
