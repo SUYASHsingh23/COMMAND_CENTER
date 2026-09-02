@@ -108,19 +108,6 @@ export function useSupervisorStream() {
           })
           break
 
-        case 'rag.retrieved':
-          store.addRagPassages(sid, (event.passages ?? []).map((p: any) => ({
-            title: p.title ?? p.text?.slice(0, 50) ?? 'Document',
-            score: p.score ?? 0,
-            category: p.category ?? 'general',
-          })))
-          store.addTimelineEntry(sid, {
-            type: 'rag',
-            timestamp: ts,
-            label: `RAG Retrieved`,
-            detail: `${event.doc_count} passage${event.doc_count !== 1 ? 's' : ''} · query: "${event.query?.slice(0, 40)}…"`,
-          })
-          break
 
         case 'policy.decision':
           store.addPolicyDecision(sid, {

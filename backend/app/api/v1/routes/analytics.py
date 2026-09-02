@@ -325,28 +325,93 @@ async def get_sentiment_timeline(
     ]
 
 
+@router.get("/escalations/open-count")
+async def get_open_escalation_count(
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Returns count of open escalations — used by the Billing page badge."""
+    count = await db.scalar(
+        select(func.count()).select_from(Escalation).where(Escalation.status == "open")
+    )
+    return {"open_count": count or 0}
+
+
 @router.get("/escalations")
 async def list_escalations(
-    limit: int = 20,
+    limit: int = 50,
+    status: str = "all",
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
-    result = await db.execute(
-        select(Escalation)
+    """List escalations with customer name joined. Filter by status=open|assigned|resolved|all."""
+    from app.models.customer import Customer
+    query = (
+        select(
+            Escalation,
+            Customer.name.label("customer_name"),
+            Customer.email.label("customer_email"),
+        )
+        .outerjoin(Customer, Customer.customer_id == Escalation.customer_id)
         .order_by(Escalation.timestamp.desc())
         .limit(limit)
     )
-    escs = result.scalars().all()
+    if status != "all":
+        query = query.where(Escalation.status == status)
+
+    result = await db.execute(query)
+    rows = result.all()
     return [
         {
-            "escalation_id": str(e.escalation_id),
-            "conversation_id": str(e.conversation_id),
-            "reason": e.reason,
-            "agent_id": e.agent_id,
-            "handoff_context": e.handoff_context,
-            "timestamp": e.timestamp.isoformat() if e.timestamp else None,
+            "escalation_id": str(row.Escalation.escalation_id),
+            "conversation_id": str(row.Escalation.conversation_id),
+            "reason": row.Escalation.reason,
+            "status": row.Escalation.status,
+            "customer_id": str(row.Escalation.customer_id) if row.Escalation.customer_id else None,
+            "customer_name": row.customer_name,
+            "customer_email": row.customer_email,
+            "appointment_reference": row.Escalation.appointment_reference,
+            "resolved_by": row.Escalation.resolved_by,
+            "resolved_at": row.Escalation.resolved_at.isoformat() if row.Escalation.resolved_at else None,
+            "handoff_context": row.Escalation.handoff_context,
+            "timestamp": row.Escalation.timestamp.isoformat() if row.Escalation.timestamp else None,
         }
-        for e in escs
+        for row in rows
     ]
+
+
+@router.patch("/escalations/{escalation_id}")
+async def update_escalation(
+    escalation_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    status: str | None = None,
+    resolved_by: str | None = None,
+):
+    """Update escalation status (open → assigned → resolved). resolved_by is the agent name."""
+    from datetime import datetime, timezone
+    from uuid import UUID
+    eid = UUID(escalation_id)
+    esc = (await db.execute(
+        select(Escalation).where(Escalation.escalation_id == eid)
+    )).scalar_one_or_none()
+
+    if not esc:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Escalation not found")
+
+    if status:
+        esc.status = status
+    if resolved_by:
+        esc.resolved_by = resolved_by
+    if status == "resolved" and not esc.resolved_at:
+        esc.resolved_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(esc)
+    return {
+        "escalation_id": str(esc.escalation_id),
+        "status": esc.status,
+        "resolved_by": esc.resolved_by,
+        "resolved_at": esc.resolved_at.isoformat() if esc.resolved_at else None,
+    }
 
 
 # ── Session TTL & Admin Force-End ──────────────────────────────────────────────

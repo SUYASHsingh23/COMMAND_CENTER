@@ -43,11 +43,17 @@ _REGISTRY: dict[str, ToolSchema] = {
         required_params=["invoice_id", "amount", "reason"],
         requires_auth=True,
     ),
-    "check_outage": ToolSchema(
-        name="check_outage",
-        description="Check for active service outages in the customer's area",
-        params={"area_code": "str", "customer_id": "str"},
-        required_params=[],
+    "get_claim_status": ToolSchema(
+        name="get_claim_status",
+        description="Look up the status of a claim, refund, or investigation by reference number",
+        params={"reference_number": "str", "customer_id": "str"},
+        required_params=["reference_number"],
+    ),
+    "get_policy_coverage": ToolSchema(
+        name="get_policy_coverage",
+        description="Get coverage details, limits, deductibles, and exclusions for a customer's active insurance plan",
+        params={"customer_id": "str", "plan": "str"},
+        required_params=["customer_id"],
     ),
     "create_ticket": ToolSchema(
         name="create_ticket",

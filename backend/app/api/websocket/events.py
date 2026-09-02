@@ -81,6 +81,7 @@ class ToolCompletedEvent(BaseEvent):
     status: str
     output: dict
     duration_ms: int
+    input_params: dict = {}
 
 
 class RagRetrievedEvent(BaseEvent):

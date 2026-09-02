@@ -45,16 +45,19 @@ async def _ttl_loop():
 
 async def lifespan(app: FastAPI):
     await get_redis_client()
+
+    # ── RAG Knowledge Base Initialization (ChromaDB + FAISS + Redis) ────────────
+    # This seeds all knowledge documents from knowledge/policies/*.md
+    # and knowledge/faqs/*.json into the new hybrid RAG engine.
     async with async_session_factory() as db:
         from app.orchestrator.rag.seeder import seed_knowledge_base
         seeded = await seed_knowledge_base(db)
-        logger.info("Knowledge base ready: %d documents seeded", seeded)
+        logger.info("RAG knowledge base ready: %d new chunks upserted", seeded)
 
     # Pre-warm the SentenceTransformer embedding model so the first voice turn
     # doesn't block the event loop for 2-4 seconds during cold model load.
     try:
         from app.orchestrator.rag.embedder import TextEmbedder
-        import asyncio as _asyncio
         _embedder = TextEmbedder()
         await _embedder.embed("warmup")
         logger.info("Embedding model pre-warmed and ready")
@@ -68,6 +71,12 @@ async def lifespan(app: FastAPI):
     yield
     if _ttl_task:
         _ttl_task.cancel()
+    # Graceful RAG shutdown — close Redis connection pool
+    try:
+        from app.orchestrator.rag.search_engine import rag_engine
+        await rag_engine.close()
+    except Exception as exc:
+        logger.warning("RAG engine close error (non-fatal): %s", exc)
     await close_redis()
     logger.info("Command Center backend stopped")
 

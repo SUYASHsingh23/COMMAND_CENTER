@@ -28,3 +28,14 @@ class Escalation(Base):
     agent_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     handoff_context: Mapped[dict] = mapped_column(JSONB, default=dict)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # ── Queue management fields ────────────────────────────────────────────────
+    # status lifecycle: open → assigned → resolved
+    status: Mapped[str] = mapped_column(String(30), default="open", server_default="open")
+    # Direct link to customer for efficient queue queries (also in handoff_context)
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customer.customer_id", ondelete="SET NULL"), nullable=True)
+    # Reference from the escalate_to_human tool (appointment / ticket number)
+    appointment_reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Who resolved it and when
+    resolved_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -9,13 +9,11 @@ from app.orchestrator.context.assembler import ContextAssembler, AgentContext
 from app.orchestrator.planner.planner import AgentPlanner
 from app.orchestrator.planner.executor import PlanExecutor
 from app.orchestrator.tools.orchestrator import ToolOrchestrator
-from app.orchestrator.rag.manager import RAGManager
-from app.orchestrator.rag.embedder import TextEmbedder
 from app.orchestrator.policy.engine import PolicyEngine
 from app.orchestrator.workflows.executor import WorkflowExecutor
 from app.orchestrator.summary.generator import CallSummaryGenerator, EscalationHandler
 from app.api.websocket.events import (
-    IntentDetectedEvent, SentimentUpdatedEvent, ResponseGeneratedEvent, RagRetrievedEvent
+    IntentDetectedEvent, SentimentUpdatedEvent, ResponseGeneratedEvent
 )
 from app.observability.bus import event_bus
 from app.database.session import async_session_factory
@@ -81,8 +79,6 @@ class AgentOrchestrator:
         self._planner = AgentPlanner()
         self._tool_orchestrator = ToolOrchestrator()
         self._executor = PlanExecutor(self._tool_orchestrator)
-        self._rag = RAGManager()
-        self._embedder = TextEmbedder()
         self._policy = PolicyEngine()
         self._workflow_executor = WorkflowExecutor()
         self._groq = AsyncGroq(api_key=settings.groq_api_key)
@@ -98,28 +94,7 @@ class AgentOrchestrator:
         async with async_session_factory() as db:
             memory = await self._memory.load(session_id, db)
 
-        # ── Run intent extraction + RAG embedding concurrently ──────────────────
-        # This cuts ~2-4s of sequential wait per turn.
-        async def _do_rag():
-            try:
-                embedding = await self._embedder.embed(transcript)
-                async with async_session_factory() as db:
-                    result = await self._rag.retrieve(
-                        query=transcript,
-                        query_embedding=embedding,
-                        db=db,
-                        conversation_id=conversation_id,
-                        top_k=3,
-                    )
-                return result
-            except Exception as exc:
-                logger.error("RAG retrieval error: %s", exc)
-                return None
-
-        intent_result, rag_result = await asyncio.gather(
-            self._intent_extractor.extract(transcript, memory.history),
-            _do_rag(),
-        )
+        intent_result = await self._intent_extractor.extract(transcript, memory.history)
 
         domain = self._router.route(intent_result)
 
@@ -137,15 +112,6 @@ class AgentOrchestrator:
             urgency=intent_result.urgency,
         ))
 
-        rag_context = ""
-        if rag_result:
-            rag_context = rag_result.to_context_block()
-            await event_bus.emit(session_id, RagRetrievedEvent(
-                session_id=session_id,
-                query=transcript,
-                passages=[{"title": p.title, "score": p.score, "category": p.category} for p in rag_result.passages],
-                doc_count=len(rag_result.passages),
-            ))
 
         # ── Read pre-loaded customer context from session state ─────────────────
         # CustomerContextLoader populates this at session creation so we never

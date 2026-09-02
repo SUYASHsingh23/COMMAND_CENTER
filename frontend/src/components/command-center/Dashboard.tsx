@@ -5,7 +5,6 @@ import type { SupervisorSession } from '@/store/supervisor'
 import { ConversationMonitor } from './ConversationMonitor'
 import { AgentTimeline } from './AgentTimeline'
 import { ToolExecutionView } from './ToolExecutionView'
-import { RagSourcesView } from './RagSourcesView'
 import { MemoryPanel } from './MemoryPanel'
 import { CallSummary } from './CallSummary'
 import { EscalationQueue } from './EscalationQueue'
@@ -227,7 +226,6 @@ export function CommandCenter() {
               {panel === 'transcript'  && <ConversationMonitor session={active} />}
               {panel === 'timeline'    && <AgentTimeline session={active} />}
               {panel === 'tools'       && <ToolExecutionView session={active} />}
-              {panel === 'rag'         && <RagSourcesView session={active} />}
               {panel === 'agent_state' && <MemoryPanel session={active} />}
               {panel === 'summary'     && <CallSummary session={active} />}
             </div>
@@ -306,7 +304,6 @@ function PanelTabs({ active, onSelect, session }: {
     { id: 'transcript',  label: '💬 Transcript',   badge: session.messages.length || undefined },
     { id: 'timeline',    label: '⏱ Timeline',      badge: session.agent_timeline.length || undefined },
     { id: 'tools',       label: '⚙️ Tools',         badge: session.tool_executions.length || undefined },
-    { id: 'rag',         label: '📚 RAG',           badge: session.rag_passages.length || undefined },
     { id: 'agent_state', label: '🔍 Agent State' },
     { id: 'summary',     label: session.is_escalated ? '🚨 Summary' : '📋 Summary' },
   ]
@@ -420,7 +417,7 @@ function Sidebar({ sessions, activeId, onSelect }: {
           fontWeight: 600,
           textDecoration: 'none',
         }}>
-          🛁 Policy Holders
+          📇 Policy Holders
         </a>
         <a href="/billing" style={{
           display: 'block',

@@ -1003,7 +1003,7 @@ export default function SchedulingDashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 16 }}>📅</span>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Scheduling System</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Surveyor Scheduling</div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Live Appointment Queue & Agent Routing</div>
           </div>
         </div>
@@ -1019,9 +1019,9 @@ export default function SchedulingDashboard() {
             </>
           )}
           <a href="/supervisor" style={{ fontSize: 11, color: 'var(--accent-blue)', textDecoration: 'none', fontWeight: 600 }}>← Supervisor</a>
-          <a href="/crm" style={{ fontSize: 11, color: '#a78bfa', textDecoration: 'none', fontWeight: 600 }}>📇 CRM</a>
-          <a href="/billing" style={{ fontSize: 11, color: '#f59e0b', textDecoration: 'none', fontWeight: 600 }}>💳 Billing</a>
-          <a href="/" style={{ fontSize: 11, color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 600 }}>Voice Agent</a>
+          <a href="/crm" style={{ fontSize: 11, color: '#a78bfa', textDecoration: 'none', fontWeight: 600 }}>📇 Policy Holders</a>
+          <a href="/billing" style={{ fontSize: 11, color: '#f59e0b', textDecoration: 'none', fontWeight: 600 }}>💳 Premium & Claims</a>
+          <a href="/" style={{ fontSize: 11, color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 600 }}>← Policy Holder Portal</a>
         </div>
       </div>
 

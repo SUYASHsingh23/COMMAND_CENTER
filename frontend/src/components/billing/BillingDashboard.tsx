@@ -244,6 +244,7 @@ export default function BillingDashboard() {
   const [refunds, setRefunds] = useState<RefundRequest[]>([])
   const [allRefunds, setAllRefunds] = useState<RefundRequest[]>([])
   const [allInvestigations, setAllInvestigations] = useState<RefundRequest[]>([])
+  const [allEscalations, setAllEscalations] = useState<any[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'transactions' | 'refunds'>('overview')
@@ -269,11 +270,13 @@ export default function BillingDashboard() {
     fetch(`${API}/stats`).then(r => r.json()).then(setStats).catch(() => {})
     fetch(`${API}/refunds?status=under_review`).then(r => r.json()).then(setAllRefunds).catch(() => {})
     fetch(`${API}/refunds?investigation_only=true`).then(r => r.json()).then(setAllInvestigations).catch(() => {})
+    fetch('/api/v1/analytics/escalations?status=open&limit=30').then(r => r.json()).then(setAllEscalations).catch(() => {})
   }, [])
 
   const refreshQueues = () => {
     fetch(`${API}/refunds?status=under_review`).then(r => r.json()).then(setAllRefunds).catch(() => {})
     fetch(`${API}/refunds?investigation_only=true`).then(r => r.json()).then(setAllInvestigations).catch(() => {})
+    fetch('/api/v1/analytics/escalations?status=open&limit=30').then(r => r.json()).then(setAllEscalations).catch(() => {})
     fetch(`${API}/stats`).then(r => r.json()).then(setStats).catch(() => {})
   }
 
@@ -362,7 +365,7 @@ export default function BillingDashboard() {
           <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
             COMMAND CENTER
           </span>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Billing System</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Premium & Claims</span>
         </div>
 
         {/* Stats strip */}
@@ -499,9 +502,9 @@ export default function BillingDashboard() {
 
           <div style={{ borderTop: '1px solid var(--border)', padding: '10px 12px', display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <a href="/supervisor" style={{ fontSize: 11, color: 'var(--text-secondary)', textDecoration: 'none', cursor: 'pointer' }}>← Supervisor</a>
-            <a href="/crm" style={{ fontSize: 11, color: '#3b82f6', textDecoration: 'none', cursor: 'pointer' }}>📇 CRM</a>
-            <a href="/scheduling" style={{ fontSize: 11, color: '#10b981', textDecoration: 'none', cursor: 'pointer' }}>📅 Scheduling</a>
-            <a href="/" style={{ fontSize: 11, color: 'var(--text-secondary)', textDecoration: 'none', cursor: 'pointer' }}>Voice Agent</a>
+            <a href="/crm" style={{ fontSize: 11, color: '#3b82f6', textDecoration: 'none', cursor: 'pointer' }}>📇 Policy Holders</a>
+            <a href="/scheduling" style={{ fontSize: 11, color: '#10b981', textDecoration: 'none', cursor: 'pointer' }}>📅 Surveyor Scheduling</a>
+            <a href="/" style={{ fontSize: 11, color: 'var(--text-secondary)', textDecoration: 'none', cursor: 'pointer' }}>← Policy Holder Portal</a>
           </div>
         </aside>
 
@@ -579,7 +582,7 @@ export default function BillingDashboard() {
           ) : null}
         </main>
 
-        {/* ── Right Panel — Refund Queue + Investigations ─────────────── */}
+        {/* ── Right Panel — Refund Queue + Investigations + Escalations ─── */}
         <aside style={{
           width: 320, borderLeft: '1px solid var(--border)',
           display: 'flex', flexDirection: 'column', flexShrink: 0,
@@ -592,6 +595,11 @@ export default function BillingDashboard() {
           <div style={{ borderTop: '2px solid var(--border)', flexShrink: 0 }} />
           <InvestigationQueuePanel
             investigations={allInvestigations}
+            onRefresh={refreshQueues}
+          />
+          <div style={{ borderTop: '2px solid var(--border)', flexShrink: 0 }} />
+          <EscalationHumanQueuePanel
+            escalations={allEscalations}
             onRefresh={refreshQueues}
           />
         </aside>
@@ -1463,6 +1471,183 @@ function InvestigationQueuePanel({ investigations, onRefresh }: { investigations
       <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
         <button onClick={onRefresh} style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>
           ↻ Refresh investigations
+        </button>
+      </div>
+    </>
+  )
+}
+
+// ─── Escalation Human Resolution Queue Panel ──────────────────────────────────
+
+function EscalationHumanQueuePanel({ escalations, onRefresh }: { escalations: any[]; onRefresh: () => void }) {
+  const [resolving, setResolving] = useState<string | null>(null)
+  const [resolvedBy, setResolvedBy] = useState('')
+
+  const sentimentColor = (s: string) => {
+    const m: Record<string, string> = { angry: '#ef4444', frustrated: '#f97316', neutral: '#64748b', positive: '#10b981' }
+    return m[s] || '#64748b'
+  }
+
+  const updateStatus = async (id: string, status: string) => {
+    const params = new URLSearchParams({ status })
+    if (resolvedBy) params.append('resolved_by', resolvedBy)
+    await fetch(`/api/v1/analytics/escalations/${id}?${params}`, { method: 'PATCH' })
+    setResolving(null)
+    setResolvedBy('')
+    onRefresh()
+  }
+
+  return (
+    <>
+      <div style={{ padding: '14px 14px 8px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14 }}>🚨</span>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#f97316', letterSpacing: '-0.01em' }}>
+              Escalation Queue
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              {escalations.length} open case{escalations.length !== 1 ? 's' : ''} awaiting human resolution
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+        {escalations.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+            No open escalations
+          </div>
+        ) : escalations.map((esc: any) => (
+          <div key={esc.escalation_id} style={{
+            padding: '10px', marginBottom: 8, borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-primary)',
+            border: '1px solid rgba(249,115,22,0.25)',
+            boxShadow: '0 0 8px rgba(249,115,22,0.08)',
+          }}>
+            {/* Reference ID */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              marginBottom: 6, padding: '5px 8px',
+              background: 'rgba(249,115,22,0.08)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid rgba(249,115,22,0.2)',
+            }}>
+              <div>
+                <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 1 }}>ESCALATION ID</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#f97316' }}>
+                  ESC-{esc.escalation_id.slice(0, 8).toUpperCase()}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 9, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: 1 }}>SENTIMENT</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: sentimentColor(esc.handoff_context?.sentiment || 'neutral'), textTransform: 'capitalize' }}>
+                  {esc.handoff_context?.sentiment || 'neutral'}
+                </div>
+              </div>
+            </div>
+
+            {/* Customer Name */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+              {esc.customer_name || 'Unknown Customer'}
+            </div>
+
+            {/* Reason */}
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.4 }}>
+              {esc.reason.slice(0, 120)}{esc.reason.length > 120 ? '…' : ''}
+            </div>
+
+            {/* Meta info */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+              {esc.handoff_context?.domain && (
+                <span style={{
+                  fontSize: 9, padding: '2px 6px', borderRadius: 4,
+                  background: 'rgba(167,139,250,0.12)', color: '#a78bfa', fontWeight: 700, textTransform: 'uppercase',
+                }}>
+                  {esc.handoff_context.domain}
+                </span>
+              )}
+              <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                {esc.timestamp ? new Date(esc.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+              </span>
+              {esc.handoff_context?.turn_count != null && (
+                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                  {esc.handoff_context.turn_count} turns
+                </span>
+              )}
+            </div>
+
+            {/* Appointment reference */}
+            {esc.appointment_reference && (
+              <div style={{ fontSize: 10, color: '#60a5fa', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>
+                🔗 Ref: {esc.appointment_reference}
+              </div>
+            )}
+
+            {/* Action: resolve form */}
+            {resolving === esc.escalation_id ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <input
+                  placeholder="Resolved by agent name (optional)"
+                  value={resolvedBy}
+                  onChange={e => setResolvedBy(e.target.value)}
+                  style={{
+                    padding: '5px 8px', fontSize: 11, background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)', outline: 'none',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => updateStatus(esc.escalation_id, 'resolved')}
+                    style={{
+                      flex: 1, padding: '6px', fontSize: 11, fontWeight: 600,
+                      background: 'rgba(16,185,129,0.15)', color: '#10b981',
+                      border: '1px solid rgba(16,185,129,0.3)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                    }}
+                  >
+                    ✓ Mark Resolved
+                  </button>
+                  <button
+                    onClick={() => updateStatus(esc.escalation_id, 'assigned')}
+                    style={{
+                      flex: 1, padding: '6px', fontSize: 11, fontWeight: 600,
+                      background: 'rgba(96,165,250,0.15)', color: '#60a5fa',
+                      border: '1px solid rgba(96,165,250,0.3)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                    }}
+                  >
+                    Assign to Me
+                  </button>
+                  <button
+                    onClick={() => { setResolving(null); setResolvedBy('') }}
+                    style={{
+                      padding: '6px 10px', fontSize: 11, background: 'transparent',
+                      border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-secondary)', cursor: 'pointer',
+                    }}
+                  >✕</button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setResolving(esc.escalation_id)}
+                style={{
+                  width: '100%', padding: '6px', fontSize: 11, fontWeight: 600,
+                  background: 'rgba(249,115,22,0.12)', color: '#f97316',
+                  border: '1px solid rgba(249,115,22,0.3)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                }}
+              >
+                Resolve / Assign →
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+        <button onClick={onRefresh} style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+          ↻ Refresh escalations
         </button>
       </div>
     </>

@@ -2,12 +2,6 @@ import { create } from 'zustand'
 import type { Message } from '@/types/conversation'
 import type { ToolExecution } from '@/types/tools'
 
-export interface RagPassage {
-  title: string
-  score: number
-  category: string
-}
-
 export interface WorkflowStep {
   workflow_name: string
   step_name: string
@@ -70,7 +64,7 @@ export interface SupervisorSession {
   intents: string[]
   entities: Record<string, string>
   tool_executions: ToolExecution[]
-  rag_passages: RagPassage[]
+
   workflow_steps: WorkflowStep[]
   policy_decisions: PolicyDecision[]
   agent_timeline: AgentTimelineEntry[]
@@ -100,7 +94,7 @@ interface SupervisorStore {
   setIntents: (sessionId: string, intents: string[], entities: Record<string, string>) => void
   setSentiment: (sessionId: string, sentiment: string, urgency: string) => void
   addToolExecution: (sessionId: string, exec: ToolExecution) => void
-  addRagPassages: (sessionId: string, passages: RagPassage[]) => void
+
   addWorkflowStep: (sessionId: string, step: WorkflowStep) => void
   addPolicyDecision: (sessionId: string, decision: PolicyDecision) => void
   addTimelineEntry: (sessionId: string, entry: AgentTimelineEntry) => void
@@ -129,7 +123,7 @@ const defaultSession = (session_id: string): SupervisorSession => ({
   intents: [],
   entities: {},
   tool_executions: [],
-  rag_passages: [],
+
   workflow_steps: [],
   policy_decisions: [],
   agent_timeline: [],
@@ -207,18 +201,6 @@ export const useSupervisorStore = create<SupervisorStore>((set) => ({
       }
     }),
 
-  addRagPassages: (sessionId, passages) =>
-    set((state) => {
-      const s = state.sessions[sessionId]
-      if (!s) return state
-      return {
-        sessions: {
-          ...state.sessions,
-          [sessionId]: { ...s, rag_passages: [...s.rag_passages, ...passages] },
-        },
-      }
-    }),
-
   addWorkflowStep: (sessionId, step) =>
     set((state) => {
       const s = state.sessions[sessionId]
@@ -282,7 +264,16 @@ export const useSupervisorStore = create<SupervisorStore>((set) => ({
   dismissEscalationAlert: (sessionId) =>
     set((state) => ({ escalationAlerts: state.escalationAlerts.filter((a) => a.session_id !== sessionId) })),
 
-  setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
+  setActiveSession: (sessionId) => set((state) => ({
+    activeSessionId: sessionId,
+    // Clear stale state when switching sessions
+    sessions: sessionId && state.sessions[sessionId]
+      ? {
+          ...state.sessions,
+          [sessionId]: { ...state.sessions[sessionId] },
+        }
+      : state.sessions,
+  })),
 
   setDashboardMetrics: (metrics) => set({ dashboardMetrics: metrics }),
 }))

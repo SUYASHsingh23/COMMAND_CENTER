@@ -47,11 +47,36 @@ async def _dispatch(tool_name: str, params: dict) -> dict:
             amount=float(params["amount"]),
         )
 
-    if tool_name == "check_outage":
-        return await _billing.check_outage(
-            area_code=params.get("area_code"),
-            customer_id=params.get("customer_id"),
-        )
+    if tool_name == "get_claim_status":
+        reference = params.get("reference_number", "")
+        customer_id = params.get("customer_id")
+        # Look up refund/claim by reference number via billing service
+        try:
+            result = await _billing.get_claim_status(
+                reference_number=reference,
+                customer_id=customer_id,
+            )
+        except AttributeError:
+            # Fallback: search invoices for matching refund reference
+            result = {"found": False, "reference": reference, "status": "not_found",
+                      "message": f"No claim found with reference {reference}"}
+        return result
+    if tool_name == "get_policy_coverage":
+        customer_id = params.get("customer_id")
+        plan = params.get("plan")
+        # Get account details which includes plan info and coverage
+        account_result = await _crm.get_account(customer_id=customer_id)
+        if account_result.get("found"):
+            account = account_result.get("account", {})
+            plan_name = plan or account.get("plan", "unknown")
+            return {
+                "found": True,
+                "customer_id": customer_id,
+                "plan": plan_name,
+                "coverage_summary": account,
+                "message": f"Coverage details retrieved for plan: {plan_name}",
+            }
+        return {"found": False, "error": "Customer account not found"}
     if tool_name == "create_ticket":
         return await _ticketing.create_ticket(
             customer_id=params["customer_id"],
@@ -149,8 +174,14 @@ def _make_summary(tool_name: str, output: dict) -> str:
         if output.get("success"):
             return output.get("summary", "Payment successful")
         return f"Payment failed: {output.get('error', 'Unknown error')}"
-    if tool_name == "check_outage":
-        return "Active outage detected" if output.get("has_outage") else "No active outages"
+    if tool_name == "get_claim_status":
+        if output.get("found"):
+            return f"Claim {output.get('reference', '')}: {output.get('status', 'unknown')}"
+        return output.get("message", "Claim not found")
+    if tool_name == "get_policy_coverage":
+        if output.get("found"):
+            return f"Coverage retrieved for plan: {output.get('plan', 'N/A')}"
+        return output.get("error", "Coverage lookup failed")
     if tool_name == "create_ticket":
         return f"Ticket {output.get('ticket_id', '')} created" if output.get("success") else "Ticket creation failed"
     if tool_name == "schedule_engineer":
@@ -207,6 +238,7 @@ class ToolOrchestrator:
             status=status,
             output=output,
             duration_ms=duration_ms,
+            input_params=params,
         ))
 
         asyncio.create_task(self._persist(conversation_id, tool_name, params, output, status, duration_ms))

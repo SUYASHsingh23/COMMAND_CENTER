@@ -20,7 +20,8 @@ Available tools:
 - get_invoice_detail: get full details of a specific premium invoice (line items, notes)
 - get_payment_history: get full premium payment transaction history with receipts
 - issue_refund: issue a premium refund or claim settlement credit (requires invoice_id and amount)
-- check_outage: check claim processing delays or regional service disruptions
+- get_claim_status: look up the status of a specific claim or refund by reference number (e.g. REF-XXXX or CASE-XXXX)
+- get_policy_coverage: get full coverage details, limits, deductibles, and exclusions for the policy-holder's active plan
 - create_ticket: create a claim support or technical ticket
 - schedule_engineer: schedule an insurance surveyor or field inspector visit
 - update_customer_details: update policy-holder profile fields (email, phone, city, address, plan, etc.)
@@ -32,7 +33,8 @@ Rules:
 - If [CUSTOMER] data already contains phone/email/name, set direct_answer=true — no tool needed
 - For update requests (change city, email, phone, policy, address etc.): use update_customer_details immediately
 - For billing disputes or premium refunds: ALWAYS get_invoice first, then get_invoice_detail for the specific invoice
-- For claim-related technical issues: check_outage first to see if there's a regional processing delay
+- For questions about what is covered, limits, deductibles: use get_policy_coverage
+- For checking status of a specific claim by reference number (REF-XXXX, CASE-XXXX): use get_claim_status
 - For payment receipts or premium history: get_payment_history
 - For paying a premium or outstanding amount from existing balance: pay_outstanding_balance
 - For surveyor/inspector scheduling: schedule_engineer
@@ -52,6 +54,7 @@ Respond ONLY with valid JSON in this exact format:
 
 If no tools are needed, respond:
 {"plan": [], "direct_answer": true}"""
+
 
 
 

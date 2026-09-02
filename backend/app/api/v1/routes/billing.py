@@ -254,6 +254,8 @@ async def list_invoices(
     return out
 
 
+
+
 @router.get("/invoices/{invoice_id}", response_model=InvoiceOut)
 async def get_invoice(invoice_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     inv = await db.get(Invoice, invoice_id)
@@ -262,6 +264,179 @@ async def get_invoice(invoice_id: uuid.UUID, db: AsyncSession = Depends(get_db))
     result = InvoiceOut.model_validate(inv)
     result.outstanding_amount = inv.total_amount - inv.amount_paid
     return result
+
+
+# ─── Receipt (printable HTML) ─────────────────────────────────────────────────
+
+@router.get("/receipts/{invoice_number}")
+async def get_receipt(invoice_number: str, db: AsyncSession = Depends(get_db)):
+    """
+    Generate a printable HTML receipt for any invoice by invoice number.
+    Opens in browser and can be downloaded / printed as PDF.
+    """
+    from fastapi.responses import HTMLResponse
+    from sqlalchemy import select as sa_select
+
+    stmt = sa_select(Invoice).where(Invoice.invoice_number == invoice_number)
+    inv = (await db.execute(stmt)).scalar_one_or_none()
+    if not inv:
+        raise HTTPException(status_code=404, detail=f"Invoice {invoice_number!r} not found")
+
+    # Fetch customer and account info
+    customer = await db.get(Customer, inv.customer_id)
+    acct_row = await db.execute(
+        sa_select(Account).where(Account.customer_id == inv.customer_id).limit(1)
+    )
+    acct = acct_row.scalar_one_or_none()
+
+    cust_name = customer.name if customer else "—"
+    cust_phone = customer.phone if customer else "—"
+    cust_email = customer.email if customer else "—"
+    plan_name = acct.plan_name if acct else "Insurance Policy"
+    acct_num = str(acct.account_id).split('-')[0].upper() if acct else "—"
+    payment_method = acct.payment_method if acct else "—"
+
+    status_color = {
+        "paid": "#16a34a", "overdue": "#dc2626", "partial": "#d97706",
+        "sent": "#2563eb", "cancelled": "#6b7280",
+    }.get(inv.status, "#374151")
+
+    period_str = ""
+    if inv.billing_period_start and inv.billing_period_end:
+        period_str = f"{inv.billing_period_start.strftime('%d %b %Y')} — {inv.billing_period_end.strftime('%d %b %Y')}"
+
+    line_items_html = ""
+    for li in (inv.line_items or []):
+        desc = li.get("description", plan_name)
+        qty = li.get("quantity", 1)
+        unit = float(li.get("unit_price", inv.subtotal))
+        disc = float(li.get("discount", 0))
+        tax = li.get("tax_pct", "18")
+        amt = float(li.get("amount", inv.subtotal))
+        line_items_html += f"""
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0">{desc}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center">{qty}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:right">₹{unit:,.2f}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:right;color:#16a34a">{f'−₹{disc:,.2f}' if disc > 0 else '—'}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center">{tax}%</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">₹{amt:,.2f}</td>
+        </tr>"""
+
+    paid_note = f"<p style='color:#16a34a;font-weight:600;margin:0'>✓ Paid on {inv.paid_at.strftime('%d %b %Y, %H:%M') if inv.paid_at else 'N/A'} via {payment_method}</p>" if inv.status == "paid" else ""
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Receipt — {invoice_number}</title>
+  <style>
+    *{{box-sizing:border-box;margin:0;padding:0}}
+    body{{font-family:'Segoe UI',Arial,sans-serif;background:#f8f9fb;color:#1a1a2e;padding:32px 16px}}
+    .page{{max-width:720px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.10);overflow:hidden}}
+    .header{{background:linear-gradient(135deg,#0f766e 0%,#0e9a90 100%);padding:28px 32px;color:#fff}}
+    .logo{{font-size:22px;font-weight:800;letter-spacing:-0.02em;margin-bottom:4px}}
+    .logo span{{color:#5eead4}}
+    .tagline{{font-size:12px;opacity:0.8;letter-spacing:0.08em}}
+    .invoice-badge{{display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;letter-spacing:0.06em;margin-top:16px}}
+    .body{{padding:28px 32px}}
+    .meta-grid{{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid #eee}}
+    .meta-section h3{{font-size:10px;font-weight:700;color:#6b7280;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px}}
+    .meta-section p{{font-size:13px;color:#374151;line-height:1.6}}
+    .meta-section p strong{{color:#111827}}
+    .status-chip{{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.04em;color:{status_color};background:{status_color}18;border:1px solid {status_color}40}}
+    table{{width:100%;border-collapse:collapse;margin-bottom:20px}}
+    thead tr{{background:#f9fafb}}
+    thead th{{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;color:#6b7280;letter-spacing:0.08em;text-transform:uppercase;border-bottom:2px solid #e5e7eb}}
+    thead th:not(:first-child){{text-align:right}}
+    thead th:nth-child(2),thead th:nth-child(5){{text-align:center}}
+    .totals{{margin-left:auto;width:280px}}
+    .totals table{{margin-bottom:0}}
+    .totals td{{padding:5px 0;font-size:13px;color:#374151}}
+    .totals td:last-child{{text-align:right;font-weight:500}}
+    .totals .grand td{{font-size:15px;font-weight:700;color:#111827;padding-top:8px;border-top:2px solid #e5e7eb}}
+    .footer{{padding:20px 32px;background:#f9fafb;border-top:1px solid #eee;font-size:11px;color:#9ca3af;text-align:center;line-height:1.8}}
+    @media print{{body{{background:#fff;padding:0}}.page{{box-shadow:none;border-radius:0}}button{{display:none}}}}
+  </style>
+</head>
+<body>
+  <div style="text-align:right;max-width:720px;margin:0 auto 12px;padding-right:4px">
+    <button onclick="window.print()" style="padding:8px 20px;background:#0f766e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:0.02em">
+      ⬇ Download / Print PDF
+    </button>
+  </div>
+  <div class="page">
+    <div class="header">
+      <div class="logo">Insure<span>AI</span></div>
+      <div class="tagline">AI-POWERED INSURANCE COMMAND CENTER</div>
+      <div class="invoice-badge">OFFICIAL RECEIPT · {invoice_number}</div>
+    </div>
+
+    <div class="body">
+      <div class="meta-grid">
+        <div class="meta-section">
+          <h3>Billed To</h3>
+          <p><strong>{cust_name}</strong><br/>
+          Account: {acct_num}<br/>
+          Phone: {cust_phone}<br/>
+          Email: {cust_email}</p>
+        </div>
+        <div class="meta-section">
+          <h3>Invoice Details</h3>
+          <p>
+            <strong>Invoice:</strong> {invoice_number}<br/>
+            <strong>Issued:</strong> {inv.issue_date.strftime('%d %b %Y') if inv.issue_date else '—'}<br/>
+            <strong>Due:</strong> {inv.due_date.strftime('%d %b %Y')}<br/>
+            <strong>Period:</strong> {period_str or '—'}<br/>
+            <strong>Status:</strong> <span class="status-chip">{inv.status.upper()}</span>
+          </p>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left">Description</th>
+            <th>Qty</th>
+            <th style="text-align:right">Unit Price</th>
+            <th style="text-align:right">Discount</th>
+            <th>Tax</th>
+            <th style="text-align:right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>{line_items_html or f'<tr><td colspan="6" style="padding:12px;color:#6b7280;text-align:center">{plan_name} — Quarterly Premium</td></tr>'}</tbody>
+      </table>
+
+      <div class="totals">
+        <table>
+          <tr><td>Subtotal</td><td>₹{float(inv.subtotal):,.2f}</td></tr>
+          <tr><td>Discount</td><td style="color:#16a34a">{'−₹' + f'{float(inv.discount_amount):,.2f}' if inv.discount_amount else '—'}</td></tr>
+          <tr><td>CGST (9%)</td><td>₹{float(inv.cgst_amount):,.2f}</td></tr>
+          <tr><td>SGST (9%)</td><td>₹{float(inv.sgst_amount):,.2f}</td></tr>
+          {'<tr><td>IGST</td><td>₹' + f"{float(inv.igst_amount):,.2f}" + '</td></tr>' if inv.igst_amount else ''}
+          {'<tr><td style="color:#f59e0b">Late Fee</td><td style="color:#f59e0b">₹' + f"{float(inv.late_fee_amount):,.2f}" + '</td></tr>' if inv.late_fee_applied else ''}
+          <tr class="grand"><td>Total</td><td>₹{float(inv.total_amount):,.2f}</td></tr>
+          <tr><td style="color:#16a34a">Amount Paid</td><td style="color:#16a34a">₹{float(inv.amount_paid):,.2f}</td></tr>
+          {'<tr><td style="color:#dc2626">Outstanding</td><td style="color:#dc2626">₹' + f"{float(inv.total_amount - inv.amount_paid):,.2f}" + '</td></tr>' if inv.status != 'paid' else ''}
+        </table>
+      </div>
+
+      <div style="margin-top:24px;padding:14px 18px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0">
+        {paid_note or '<p style="color:#6b7280;font-size:13px">Payment pending — please pay by due date to avoid policy lapse.</p>'}
+      </div>
+    </div>
+
+    <div class="footer">
+      InsureAI Insurance Services Pvt. Ltd. · GSTIN: 27AABCI1234F1Z5 · CIN: U66000MH2020PTC345678<br/>
+      Registered Office: 14th Floor, BKC Tower, Bandra Kurla Complex, Mumbai – 400 051<br/>
+      This is a computer-generated receipt and does not require a signature. · support@insureai.in
+    </div>
+  </div>
+</body>
+</html>"""
+
+    return HTMLResponse(content=html, status_code=200)
 
 
 # ─── Transactions ─────────────────────────────────────────────────────────────

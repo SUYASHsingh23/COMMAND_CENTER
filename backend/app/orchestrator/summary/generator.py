@@ -152,24 +152,39 @@ class EscalationHandler:
         reason: str,
         memory: SessionMemory,
         db: AsyncSession,
+        appointment_reference: str | None = None,
     ) -> Escalation:
+        customer_id_str: str | None = memory.state.get("customer_id")
+
         handoff_context = {
             "session_id": session_id,
             "sentiment": memory.state.get("sentiment", "unknown"),
             "domain": memory.state.get("domain", "general"),
             "turn_count": len(memory.history) // 2,
             "customer_verified": memory.state.get("customer_verified", False),
-            "customer_id": memory.state.get("customer_id"),
+            "customer_id": customer_id_str,
             "history_summary": [
                 {"role": t["role"], "content": t["content"][:200]}
                 for t in memory.history[-6:]
             ],
         }
 
+        # Parse customer_id to UUID if available
+        import uuid as _uuid
+        parsed_customer_id = None
+        if customer_id_str:
+            try:
+                parsed_customer_id = _uuid.UUID(customer_id_str)
+            except (ValueError, AttributeError):
+                pass
+
         record = Escalation(
             conversation_id=conversation_id,
             reason=reason,
             handoff_context=handoff_context,
+            status="open",
+            customer_id=parsed_customer_id,
+            appointment_reference=appointment_reference,
         )
         db.add(record)
         await db.commit()
@@ -190,3 +205,4 @@ class EscalationHandler:
             pass
 
         return record
+

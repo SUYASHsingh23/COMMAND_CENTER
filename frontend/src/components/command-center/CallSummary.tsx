@@ -111,7 +111,6 @@ function SessionStats({ session, summary }: { session: SupervisorSession; summar
   const stats = [
     { label: 'Total Turns', value: String(session.messages.length) },
     { label: 'Tool Calls', value: String(session.tool_executions.length) },
-    { label: 'RAG Sources', value: String(session.rag_passages.length) },
     { label: 'Escalated', value: summary.escalated ? 'Yes' : 'No', color: summary.escalated ? 'var(--accent-red)' : 'var(--accent-green)' },
   ]
 

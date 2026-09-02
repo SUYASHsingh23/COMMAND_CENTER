@@ -320,14 +320,14 @@ export function CRMDashboard() {
                 ← Supervisor
               </a>
               <a href="/" style={{ flex: 1, display: 'block', textAlign: 'center', padding: '7px', background: 'rgba(71,85,105,0.08)', border: '1px solid rgba(71,85,105,0.2)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>
-                Voice Agent
+                ← Policy Holder Portal
               </a>
             </div>
             <a href="/billing" style={{ display: 'block', textAlign: 'center', padding: '7px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 'var(--radius-md)', color: '#f59e0b', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>
-              💳 Billing System
+              💳 Premium & Claims
             </a>
             <a href="/scheduling" style={{ display: 'block', textAlign: 'center', padding: '7px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 'var(--radius-md)', color: '#10b981', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>
-              📅 Scheduling
+              📅 Surveyor Scheduling
             </a>
           </div>
         </div>
@@ -392,7 +392,7 @@ function TopBar({ stats, onCreateClick }: { stats: CRMStats | null; onCreateClic
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.06em' }}>
           COMMAND CENTER
         </span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>CRM System</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Policy Holders</span>
       </div>
 
       {stats && (
@@ -579,7 +579,6 @@ function CustomerProfileView({
             { label: 'Plan Start',    value: fmtDate(account.plan_start_date) },
             { label: 'Plan End',      value: fmtDate(account.plan_end_date) },
             { label: 'Auto-Renew',    value: account.auto_renew },
-            { label: 'Data Used',     value: account.data_used_gb ? `${account.data_used_gb} GB` : null },
             { label: 'Credit Limit',  value: account.credit_limit ? fmtCurrency(account.credit_limit) : null },
           ]} />
         )}
