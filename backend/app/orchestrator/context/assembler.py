@@ -22,7 +22,6 @@ class AgentContext:
     tool_results: list[dict]
     long_term_facts: dict[str, str]
     prior_intents: list[dict]
-    rag_context: str
     workflow_result: dict | None
 
 
@@ -37,7 +36,6 @@ class ContextAssembler:
         customer_profile: dict | None = None,
         customer_context: dict | None = None,
         tool_results: list[dict] | None = None,
-        rag_context: str = "",
         workflow_result: dict | None = None,
     ) -> AgentContext:
         return AgentContext(
@@ -55,7 +53,6 @@ class ContextAssembler:
             tool_results=(tool_results or [])[-MAX_TOOL_RESULTS:],
             long_term_facts=memory.long_term,
             prior_intents=memory.prior_intents,
-            rag_context=rag_context,
             workflow_result=workflow_result,
         )
 
@@ -158,9 +155,6 @@ class ContextAssembler:
         if context.workflow_result:
             wf = context.workflow_result
             lines.append(f"[WORKFLOW]: {wf.get('workflow', '')} → {wf.get('message', wf.get('status', ''))}")
-
-        if context.rag_context:
-            lines.append(context.rag_context)
 
         if context.long_term_facts:
             facts = "; ".join(f"{k}: {v}" for k, v in list(context.long_term_facts.items())[:5])

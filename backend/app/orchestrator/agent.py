@@ -140,7 +140,6 @@ class AgentOrchestrator:
             domain=domain,
             memory=memory,
             customer_profile=customer_profile,
-            rag_context=rag_context,
             customer_context=customer_context,
         )
 
@@ -218,7 +217,6 @@ class AgentOrchestrator:
                     domain=domain,
                     memory=memory,
                     tool_results=tool_results,
-                    rag_context=rag_context,
                 )
 
         workflow_result = await self._check_and_run_workflow(intent_result, tool_results, memory, session_id, conversation_id)
@@ -230,7 +228,6 @@ class AgentOrchestrator:
                 domain=domain,
                 memory=memory,
                 tool_results=tool_results,
-                rag_context=rag_context,
                 workflow_result=workflow_result,
             )
 

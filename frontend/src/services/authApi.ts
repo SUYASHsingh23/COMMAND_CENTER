@@ -67,6 +67,8 @@ async function authFetch<T>(
 }
 
 // ─── Auth API ─────────────────────────────────────────────────────────────────
+let refreshPromise: Promise<TokenResponse> | null = null
+
 export const authApi = {
   register(name: string, email: string, phone: string | null, password: string) {
     return authFetch<TokenResponse>('/register', {
@@ -83,10 +85,15 @@ export const authApi = {
   },
 
   refresh(refresh_token: string) {
-    return authFetch<TokenResponse>('/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refresh_token }),
-    }, false)
+    if (!refreshPromise) {
+      refreshPromise = authFetch<TokenResponse>('/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token }),
+      }, false).finally(() => {
+        refreshPromise = null
+      })
+    }
+    return refreshPromise
   },
 
   logout(refresh_token: string) {

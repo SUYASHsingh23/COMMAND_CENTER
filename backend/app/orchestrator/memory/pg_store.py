@@ -103,4 +103,5 @@ class PGMemoryStore:
             return {r.key: r.value for r in rows}
         except Exception as exc:
             logger.error("PGMemoryStore get_long_term_memories error: %s", exc)
+            await db.rollback()
             return {}

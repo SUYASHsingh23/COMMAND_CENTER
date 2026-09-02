@@ -55,7 +55,7 @@ async def get_dashboard_metrics(db: Annotated[AsyncSession, Depends(get_db)]):
 
 @router.get("/conversations")
 async def list_conversations(
-    limit: int = 50,
+    limit: int = 500,
     status: str = "all",
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
