@@ -149,6 +149,8 @@ If setting up on a fresh machine, the following fixes are pre-applied in this br
    Recreated `conversation_state` table schema (`state_id`, `conversation_id`, `current_workflow`, `customer_verified`, `task_status`, `updated_at`) to fix `UndefinedColumnError`.
 4. **Windows Terminal Character Encoding**:
    Fixed unicode arrow printing in `seed_alerts.py` to prevent `UnicodeEncodeError` on Windows terminal `cp1252` encoding.
+5. **RAG Orchestrator Context Integration (`app/orchestrator/agent.py`)**:
+   Defined dynamic RAG knowledge lookup via `RAGSearchEngine.search()` inside `AgentOrchestrator.run_turn()`, fixing `NameError: name 'rag_context' is not defined`.
 
 ---
 
