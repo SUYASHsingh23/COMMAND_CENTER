@@ -1,17 +1,21 @@
-import React, { useState } from 'react'
-import type { AgentTimelineEntry, SupervisorSession } from '@/store/supervisor'
+import React, { useState, useRef, useEffect } from 'react'
+import { useConversationStore } from '@/store/conversation'
+import type { AgentTimelineEntry } from '@/store/supervisor'
 
-// ── Clean Enterprise SVG Icons (Zero Emojis) ─────────────────────────────────
+// ── Minimal Enterprise SVG Icons (Zero Emojis) ───────────────────────────────
 
 const IconTarget = ({ color = 'currentColor', size = 14 }: { color?: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2" />
   </svg>
 )
 
 const IconCpu = ({ color = 'currentColor', size = 14 }: { color?: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" />
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+    <rect x="9" y="9" width="6" height="6" />
     <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
   </svg>
 )
@@ -25,7 +29,8 @@ const IconZap = ({ color = 'currentColor', size = 14 }: { color?: string; size?:
 const IconFileCheck = ({ color = 'currentColor', size = 14 }: { color?: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" /><path d="m9 15 2 2 4-4" />
+    <polyline points="14 2 14 8 20 8" />
+    <path d="m9 15 2 2 4-4" />
   </svg>
 )
 
@@ -33,7 +38,9 @@ const IconScale = ({ color = 'currentColor', size = 14 }: { color?: string; size
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
     <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
-    <path d="M7 21h10" /><path d="M12 3v18" /><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
+    <path d="M7 21h10" />
+    <path d="M12 3v18" />
+    <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
   </svg>
 )
 
@@ -45,34 +52,46 @@ const IconShield = ({ color = 'currentColor', size = 14 }: { color?: string; siz
 
 const IconGitBranch = ({ color = 'currentColor', size = 14 }: { color?: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
+    <line x1="6" y1="3" x2="6" y2="15" />
+    <circle cx="18" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
     <path d="M18 9a9 9 0 0 1-9 9" />
   </svg>
 )
 
 const IconBot = ({ color = 'currentColor', size = 14 }: { color?: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="11" width="18" height="10" rx="2" /><circle cx="12" cy="5" r="2" />
-    <path d="M12 7v4" /><line x1="8" y1="16" x2="8" y2="16" /><line x1="16" y1="16" x2="16" y2="16" />
+    <rect x="3" y="11" width="18" height="10" rx="2" />
+    <circle cx="12" cy="5" r="2" />
+    <path d="M12 7v4" />
+    <line x1="8" y1="16" x2="8" y2="16" />
+    <line x1="16" y1="16" x2="16" y2="16" />
   </svg>
 )
 
 const IconUser = ({ color = 'currentColor', size = 14 }: { color?: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
   </svg>
 )
 
 const IconClipboardList = ({ color = 'currentColor', size = 14 }: { color?: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-    <path d="M12 11h4" /><path d="M12 16h4" /><path d="M8 11h.01" /><path d="M8 16h.01" />
+    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <path d="M12 11h4" />
+    <path d="M12 16h4" />
+    <path d="M8 11h.01" />
+    <path d="M8 16h.01" />
   </svg>
 )
 
 const IconAlertCircle = ({ color = 'currentColor', size = 14 }: { color?: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 )
 
@@ -82,9 +101,14 @@ const IconActivity = ({ color = 'currentColor', size = 14 }: { color?: string; s
   </svg>
 )
 
-interface Props {
-  session: SupervisorSession
-}
+const IconClose = ({ color = 'currentColor', size = 14 }: { color?: string; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+)
+
+// ── Color & Icon Configuration ───────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<string, { Icon: React.FC<{ color?: string; size?: number }>; color: string; bg: string; label: string }> = {
   intent:                { Icon: IconTarget,        color: '#60a5fa', bg: 'rgba(96,165,250,0.10)',  label: 'User Intent' },
@@ -137,125 +161,151 @@ const STEP_INFO_MAP: Record<string, { title: string; desc: string }> = {
   confirm_upgrade: { title: 'Confirm Upgrade Activation', desc: 'Dispatched formal upgrade confirmation and revised billing terms' },
 }
 
-export function AgentTimeline({ session }: Props) {
-  const entries = session.agent_timeline
-  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+interface Props {
+  onClose?: () => void
+}
 
-  const toggle = (i: number) => setExpanded(prev => {
+export function DiagnosticTracePanel({ onClose }: Props) {
+  const entries = useConversationStore((s) => s.agentTimeline)
+  const isConnected = useConversationStore((s) => s.isConnected)
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  const toggle = (i: number) => setExpanded((prev) => {
     const next = new Set(prev)
     next.has(i) ? next.delete(i) : next.add(i)
     return next
   })
 
-  const duration = session.ended_at && session.started_at
-    ? Math.round((new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 1000)
-    : null
+  // Auto-scroll when new live events arrive
+  useEffect(() => {
+    if (entries.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [entries.length])
 
-  // Summary counts
-  const toolCount = entries.filter(e => e.type === 'tool_completed').length
-  const docCount = entries.filter(e => e.type === 'document_verification').length
-  const policyCount = entries.filter(e => e.type === 'policy' || e.type === 'policy_evaluation').length
-  const hasEscalation = entries.some(e => e.type === 'escalation')
-  const resolution = session.call_summary?.resolution
+  // Telemetry counts
+  const toolCount = entries.filter((e) => e.type === 'tool_completed').length
+  const docCount = entries.filter((e) => e.type === 'document_verification').length
+  const policyCount = entries.filter((e) => e.type === 'policy' || e.type === 'policy_evaluation').length
+  const hasEscalation = entries.some((e) => e.type === 'escalation' || e.status === 'escalated')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg-primary)' }}>
-      {/* Header */}
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      height: '100%', overflow: 'hidden',
+      background: 'var(--bg-secondary)',
+      borderLeft: '1px solid var(--border-subtle)',
+    }}>
+      {/* ── Top Header ─────────────────────────────────────────────────── */}
       <div style={{
-        padding: '12px 18px', borderBottom: '1px solid var(--border-subtle)',
+        padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexShrink: 0, background: 'var(--bg-secondary)',
+        flexShrink: 0, background: 'var(--bg-card)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Diagnostic Trace
+          <div style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: isConnected ? '#34d399' : '#94a3b8',
+            boxShadow: isConnected ? '0 0 8px rgba(52,211,153,0.7)' : 'none',
+          }} />
+          <span style={{
+            fontSize: 11, fontWeight: 700, color: 'var(--text-primary)',
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+          }}>
+            Trace
           </span>
-          {session.customer_name && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', padding: '2px 8px', borderRadius: 4 }}>
-              {session.customer_name}
-            </span>
-          )}
+          <span style={{
+            fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+            background: 'rgba(255,255,255,0.04)', padding: '1px 6px', borderRadius: 4,
+          }}>
+            {entries.length} events
+          </span>
         </div>
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-          {duration !== null && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              {Math.floor(duration / 60)}m {duration % 60}s
-            </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Close trace panel"
+              style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: 'var(--text-muted)', padding: '4px 6px', borderRadius: 4,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'color 0.15s ease',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+            >
+              <IconClose size={13} />
+            </button>
           )}
-          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            {entries.length} total events
-          </span>
         </div>
       </div>
 
-      {/* Telemetry Meta Row */}
+      {/* ── Telemetry Summary Bar ──────────────────────────────────────── */}
       <div style={{
-        padding: '8px 18px', borderBottom: '1px solid var(--border-subtle)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        flexShrink: 0, background: 'rgba(255,255,255,0.015)', flexWrap: 'wrap', gap: 10,
+        padding: '8px 16px', borderBottom: '1px solid var(--border-subtle)',
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        background: 'rgba(255,255,255,0.015)', flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
-          <MetaChip label="Channel" value={session.channel.toUpperCase()} />
-          <MetaChip
-            label="Status"
-            value={session.status.toUpperCase()}
-            color={session.status === 'active' ? '#34d399' : session.status === 'escalated' ? '#f97316' : '#94a3b8'}
-          />
-          {docCount > 0 && <MetaChip label="Documents Verified" value={String(docCount)} color="#38bdf8" />}
-          {policyCount > 0 && <MetaChip label="Policy Checks" value={String(policyCount)} color="#f59e0b" />}
-          {toolCount > 0 && <MetaChip label="Tools Run" value={String(toolCount)} color="#34d399" />}
-          {hasEscalation && <MetaChip label="Human Routing" value="ESCALATED" color="#f97316" />}
-          {resolution && (
-            <MetaChip
-              label="Resolution"
-              value={resolution.toUpperCase()}
-              color={resolution === 'resolved' ? '#34d399' : '#f87171'}
-            />
-          )}
-        </div>
+        <TelemetryChip label="Connection" value={isConnected ? 'LIVE' : 'IDLE'} color={isConnected ? '#34d399' : '#94a3b8'} />
+        {docCount > 0 && <TelemetryChip label="Documents" value={String(docCount)} color="#38bdf8" />}
+        {policyCount > 0 && <TelemetryChip label="Policy" value={String(policyCount)} color="#f59e0b" />}
+        {toolCount > 0 && <TelemetryChip label="Tools" value={String(toolCount)} color="#34d399" />}
+        {hasEscalation && <TelemetryChip label="Routing" value="ESCALATED" color="#f97316" />}
       </div>
 
-      {/* Timeline Scroll Area */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-        {entries.length === 0 && (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, paddingTop: 40 }}>
-            <div>No events recorded for this session yet.</div>
+      {/* ── Event Stream Scroll Area ───────────────────────────────────── */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
+        {entries.length === 0 ? (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', height: '100%', gap: 12, paddingTop: 40,
+          }}>
+            <IconActivity size={26} color="var(--text-muted)" />
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.6 }}>
+              Awaiting conversation events.<br />Trace will stream here in real time.
+            </div>
           </div>
-        )}
-
-        <div style={{ position: 'relative' }}>
-          {entries.length > 0 && (
+        ) : (
+          <div style={{ position: 'relative' }}>
+            {/* Connecting timeline line */}
             <div style={{
-              position: 'absolute', left: 16, top: 10, bottom: 10, width: 2,
+              position: 'absolute', left: 14, top: 8, bottom: 8, width: 2,
               background: 'linear-gradient(to bottom, rgba(56,189,248,0.3), rgba(148,163,184,0.1))',
               borderRadius: 2,
             }} />
-          )}
-          {entries.map((entry, i) => (
-            <TimelineItem
-              key={`${entry.timestamp}-${i}`}
-              entry={entry}
-              isLast={i === entries.length - 1}
-              isExpanded={expanded.has(i)}
-              onToggle={() => toggle(i)}
-            />
-          ))}
-        </div>
+
+            {entries.map((entry, i) => (
+              <TraceItem
+                key={`${entry.timestamp}-${i}`}
+                entry={entry}
+                isLast={i === entries.length - 1}
+                isExpanded={expanded.has(i)}
+                onToggle={() => toggle(i)}
+              />
+            ))}
+            <div ref={bottomRef} />
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function MetaChip({ label, value, color }: { label: string; value: string; color?: string }) {
+function TelemetryChip({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
-      <span style={{ fontSize: 11, color: color || 'var(--text-secondary)', fontWeight: 600 }}>{value}</span>
+      <span style={{ fontSize: 8.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+      <span style={{ fontSize: 10.5, color: color || 'var(--text-secondary)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{value}</span>
     </div>
   )
 }
 
-function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
+function TraceItem({
+  entry, isLast, isExpanded, onToggle,
+}: {
   entry: AgentTimelineEntry
   isLast: boolean
   isExpanded: boolean
@@ -272,44 +322,47 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
   const hasParams = !!entry.input_params && Object.keys(entry.input_params).length > 0
   const hasSteps = !!entry.steps?.length
 
-  const hasExpandable = hasOutput || hasParams || (entry.steps && entry.steps.length > 0)
+  const hasExpandable = hasOutput || hasParams || hasSteps
 
   return (
-    <div style={{ display: 'flex', gap: 14, marginBottom: 12, position: 'relative', animation: 'slide-up 0.2s ease' }}>
-      {/* Node Icon */}
+    <div style={{
+      display: 'flex', gap: 12, marginBottom: 12, position: 'relative',
+      animation: 'slide-up 0.2s ease',
+    }}>
+      {/* Node Icon Circle */}
       <div style={{
-        width: 32, height: 32, borderRadius: '50%',
-        background: cfg.bg, border: `1.5px solid ${cfg.color}50`,
+        width: 28, height: 28, borderRadius: '50%',
+        background: cfg.bg, border: `1.5px solid ${cfg.color}45`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 13, flexShrink: 0, position: 'relative', zIndex: 1,
-        boxShadow: isLast ? `0 0 12px ${cfg.color}35` : 'none',
+        flexShrink: 0, position: 'relative', zIndex: 1,
+        boxShadow: isLast ? `0 0 10px ${cfg.color}30` : 'none',
       }}>
-        <cfg.Icon color={cfg.color} size={14} />
+        <cfg.Icon color={cfg.color} size={13} />
       </div>
 
-      {/* Main Event Card */}
+      {/* Main Card */}
       <div
         onClick={hasExpandable ? onToggle : undefined}
         style={{
-          flex: 1, padding: '10px 14px',
+          flex: 1, padding: '10px 12px',
           background: isLast ? `${cfg.bg}` : 'rgba(255,255,255,0.02)',
           borderRadius: 8,
-          border: isLast ? `1px solid ${cfg.color}30` : '1px solid var(--border-subtle)',
+          border: isLast ? `1px solid ${cfg.color}35` : '1px solid var(--border-subtle)',
           cursor: hasExpandable ? 'pointer' : 'default',
           transition: 'all 0.15s ease',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Header / Label + Status Pills */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: cfg.color }}>
+            {/* Header: Label + Badges */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: cfg.color }}>
                 {entry.label}
               </span>
 
               {entry.step_number && (
                 <span style={{
-                  fontSize: 9, padding: '1px 5px', borderRadius: 3,
+                  fontSize: 8.5, padding: '1px 5px', borderRadius: 3,
                   background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)',
                   fontWeight: 600, fontFamily: 'var(--font-mono)',
                 }}>
@@ -319,9 +372,9 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
 
               {entry.status && (
                 <span style={{
-                  fontSize: 9, padding: '1px 6px', borderRadius: 3,
+                  fontSize: 8.5, padding: '1px 5px', borderRadius: 3,
                   background: `${statusColor}18`, color: statusColor,
-                  fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                  fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
                   border: `1px solid ${statusColor}30`,
                 }}>
                   {entry.status}
@@ -329,41 +382,37 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
               )}
 
               {entry.duration_ms !== undefined && (
-                <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                <span style={{ fontSize: 8.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                   {entry.duration_ms}ms
                 </span>
               )}
             </div>
 
-            {/* Primary Detail Text - Fully visible with clean pre-wrap formatting */}
+            {/* Primary Detail - Completely visible without truncation */}
             {entry.detail && (
               <div style={{
-                fontSize: 11.5,
-                color: 'var(--text-secondary)',
-                lineHeight: 1.6,
-                marginTop: 3,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
+                fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55,
+                marginTop: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}>
                 {entry.detail}
               </div>
             )}
 
-            {/* Evidence & Document Verification Chips */}
+            {/* Document Evidence Chips */}
             {hasEvidence && (
               <div style={{
-                marginTop: 8, padding: '7px 10px', borderRadius: 6,
+                marginTop: 7, padding: '6px 8px', borderRadius: 6,
                 background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.18)',
-                display: 'flex', flexDirection: 'column', gap: 4,
+                display: 'flex', flexDirection: 'column', gap: 3,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, color: '#38bdf8' }}>
-                  <IconFileCheck size={12} color="#38bdf8" />
-                  <span>Verified Document Evidence</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 700, color: '#38bdf8' }}>
+                  <IconFileCheck size={11} color="#38bdf8" />
+                  <span>Verified Evidence</span>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
                   {Object.entries(entry.evidence!).map(([k, v]) => (
                     <span key={k} style={{
-                      fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                      fontSize: 9.5, padding: '2px 5px', borderRadius: 4,
                       background: 'rgba(0,0,0,0.25)', color: 'var(--text-primary)',
                       border: '1px solid rgba(255,255,255,0.06)', fontFamily: 'var(--font-mono)',
                     }}>
@@ -375,24 +424,24 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
               </div>
             )}
 
-            {/* Policy Rule Callout */}
+            {/* Policy Rule Box */}
             {hasRule && (
               <div style={{
                 marginTop: 6, display: 'flex', alignItems: 'flex-start', gap: 6,
-                fontSize: 10, color: '#fbbf24', background: 'rgba(251,191,36,0.05)',
+                fontSize: 9.5, color: '#fbbf24', background: 'rgba(251,191,36,0.05)',
                 padding: '4px 8px', borderRadius: 4, borderLeft: '2px solid #fbbf24',
-                borderTop: '1px solid rgba(251,191,36,0.12)', borderRight: '1px solid rgba(251,191,36,0.12)', borderBottom: '1px solid rgba(251,191,36,0.12)',
+                borderTop: '1px solid rgba(251,191,36,0.1)', borderRight: '1px solid rgba(251,191,36,0.1)', borderBottom: '1px solid rgba(251,191,36,0.1)',
               }}>
                 <span style={{ fontWeight: 700, flexShrink: 0 }}>Policy Rule:</span>
                 <span style={{ color: 'var(--text-secondary)' }}>{entry.rule}</span>
               </div>
             )}
 
-            {/* Decision & Routing Rationale Pill */}
+            {/* Decision Outcome Box */}
             {hasDecision && (
               <div style={{
                 marginTop: 6, display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 10, fontWeight: 600,
+                fontSize: 9.5, fontWeight: 600,
                 color: entry.status === 'escalated' ? '#f97316' : '#34d399',
                 background: entry.status === 'escalated' ? 'rgba(249,115,22,0.08)' : 'rgba(52,211,153,0.08)',
                 padding: '4px 8px', borderRadius: 4,
@@ -403,38 +452,38 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
               </div>
             )}
 
-            {/* Escalation Reference Box */}
+            {/* Escalation Ticket Box */}
             {hasTicket && (
               <div style={{
                 marginTop: 6, display: 'flex', alignItems: 'center', gap: 8,
-                background: 'rgba(249,115,22,0.10)', padding: '5px 9px', borderRadius: 6,
+                background: 'rgba(249,115,22,0.10)', padding: '5px 8px', borderRadius: 6,
                 border: '1px solid rgba(249,115,22,0.3)',
               }}>
-                <IconAlertCircle size={13} color="#f97316" />
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#f97316' }}>
+                <IconAlertCircle size={12} color="#f97316" />
+                <span style={{ fontSize: 9.5, fontWeight: 700, color: '#f97316' }}>
                   Escalation Ticket: {entry.ticket_reference}
                 </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 'auto' }}>
                   Specialist Review Required
                 </span>
               </div>
             )}
 
-            {/* Structured Workflow Completed Steps Breakdown */}
+            {/* Structured Workflow Steps Breakdown */}
             {hasSteps && (
               <div style={{
-                marginTop: 10, padding: '10px 12px',
-                background: 'rgba(129,140,248,0.06)', borderRadius: 8,
+                marginTop: 8, padding: '8px 10px',
+                background: 'rgba(129,140,248,0.06)', borderRadius: 6,
                 border: '1px solid rgba(129,140,248,0.18)',
               }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  marginBottom: 8, fontSize: 10, fontWeight: 700, color: '#818cf8',
+                  marginBottom: 6, fontSize: 9.5, fontWeight: 700, color: '#818cf8',
                   letterSpacing: '0.06em', textTransform: 'uppercase',
                 }}>
-                  <span>Completed Steps Breakdown ({entry.steps!.length} steps)</span>
+                  <span>Completed Steps ({entry.steps!.length})</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   {entry.steps!.map((s: any, idx: number) => {
                     const isObj = typeof s === 'object' && s !== null
                     const stepKey = isObj ? s.step_name || s.tool || '' : String(s)
@@ -451,26 +500,26 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
                       <div
                         key={idx}
                         style={{
-                          display: 'flex', alignItems: 'flex-start', gap: 10,
-                          padding: '6px 8px', borderRadius: 5,
+                          display: 'flex', alignItems: 'flex-start', gap: 8,
+                          padding: '5px 7px', borderRadius: 4,
                           background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.04)',
                         }}
                       >
                         <span style={{
-                          fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3,
+                          fontSize: 8.5, fontWeight: 700, padding: '1px 4px', borderRadius: 3,
                           background: 'rgba(129,140,248,0.2)', color: '#a5b4fc',
                           fontFamily: 'var(--font-mono)', flexShrink: 0, marginTop: 1,
                         }}>
                           #{idx + 1}
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-primary)' }}>
                               {stepTitle}
                             </span>
                             <span style={{
-                              fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase',
-                              padding: '1px 5px', borderRadius: 3,
+                              fontSize: 8, fontWeight: 700, textTransform: 'uppercase',
+                              padding: '1px 4px', borderRadius: 3,
                               background: 'rgba(52,211,153,0.15)', color: '#34d399',
                               border: '1px solid rgba(52,211,153,0.3)',
                             }}>
@@ -478,7 +527,7 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
                             </span>
                           </div>
                           {stepDetail && (
-                            <div style={{ fontSize: 10.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.45 }}>
+                            <div style={{ fontSize: 9.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.45 }}>
                               {stepDetail}
                             </div>
                           )}
@@ -490,18 +539,18 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
               </div>
             )}
 
-            {/* Collapsible Technical Details (Input params & Output) */}
+            {/* Collapsible Technical Details (Parameters & Output) */}
             {isExpanded && (hasParams || hasOutput) && (
-              <div style={{ marginTop: 8, borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
+              <div style={{ marginTop: 8, borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
                 {hasParams && (
-                  <div style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <div style={{ marginBottom: 5 }}>
+                    <div style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       Parameters
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
                       {Object.entries(entry.input_params!).map(([k, v]) => (
                         <span key={k} style={{
-                          fontSize: 9, padding: '1px 5px', borderRadius: 3,
+                          fontSize: 8.5, padding: '1px 4px', borderRadius: 3,
                           background: 'rgba(255,255,255,0.04)', color: '#94a3b8',
                           fontFamily: 'var(--font-mono)',
                         }}>
@@ -514,14 +563,14 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
 
                 {hasOutput && (
                   <div>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
+                    <div style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
                       Raw Payload
                     </div>
                     <pre style={{
-                      padding: '8px 10px', background: 'rgba(0,0,0,0.3)', borderRadius: 6,
-                      fontSize: 10, color: '#94a3b8', fontFamily: 'var(--font-mono)',
+                      padding: '6px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 5,
+                      fontSize: 9.5, color: '#94a3b8', fontFamily: 'var(--font-mono)',
                       overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                      maxHeight: 180, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.06)',
+                      maxHeight: 140, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.06)',
                     }}>
                       {JSON.stringify(entry.output, null, 2)}
                     </pre>
@@ -532,12 +581,12 @@ function TimelineItem({ entry, isLast, isExpanded, onToggle }: {
           </div>
 
           {/* Right Column: Time & Accordion Arrow */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-            <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-              {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '—'}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+            <span style={{ fontSize: 8.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+              {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
             </span>
             {hasExpandable && (
-              <span style={{ fontSize: 9, color: cfg.color, opacity: 0.8 }}>
+              <span style={{ fontSize: 8.5, color: cfg.color, opacity: 0.8 }}>
                 {isExpanded ? '▲ hide' : '▼ payload'}
               </span>
             )}

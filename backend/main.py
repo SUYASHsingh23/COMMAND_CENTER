@@ -54,6 +54,14 @@ async def lifespan(app: FastAPI):
         seeded = await seed_knowledge_base(db)
         logger.info("RAG knowledge base ready: %d new chunks upserted", seeded)
 
+    # Ensure all SQLAlchemy models have their DB tables (creates plan_event and any others
+    # that may not have been created via earlier migrations)
+    from app.database.session import engine, Base
+    import app.models  # noqa: ensure all models are imported before create_all
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database schema sync complete")
+
     # Pre-warm the SentenceTransformer embedding model so the first voice turn
     # doesn't block the event loop for 2-4 seconds during cold model load.
     try:
@@ -73,7 +81,7 @@ async def lifespan(app: FastAPI):
         _ttl_task.cancel()
     # Graceful RAG shutdown — close Redis connection pool
     try:
-        from app.orchestrator.rag.search_engine import rag_engine
+        from app.orchestrator.rag import rag_engine
         await rag_engine.close()
     except Exception as exc:
         logger.warning("RAG engine close error (non-fatal): %s", exc)
@@ -189,6 +197,7 @@ async def _run_response_pipeline(
 @app.websocket("/sessions/{session_id}/audio")
 async def audio_websocket(websocket: WebSocket, session_id: str):
     await websocket.accept()
+    manager.connect_audio(session_id, websocket)
     logger.info("Audio WebSocket connected: session=%s", session_id)
 
     audio_router = AudioRouter(session_id=session_id)
@@ -265,6 +274,7 @@ async def audio_websocket(websocket: WebSocket, session_id: str):
     except Exception as exc:
         logger.error("Audio WebSocket error session=%s: %s", session_id, exc)
     finally:
+        manager.disconnect_audio(session_id, websocket)
         await audio_router.close()
         _audio_routers.pop(session_id, None)
         conv_id = turn_counter.get("conv_id")

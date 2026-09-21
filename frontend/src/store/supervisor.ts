@@ -6,8 +6,13 @@ export interface WorkflowStep {
   workflow_name: string
   step_name: string
   step_status: string
-  steps_completed: string[]
+  steps_completed: string[] | any[]
   timestamp: string
+  detail?: string
+  evidence?: Record<string, any>
+  rule?: string
+  decision?: string
+  step_number?: number
 }
 
 export interface PolicyDecision {
@@ -19,12 +24,23 @@ export interface PolicyDecision {
 }
 
 export interface AgentTimelineEntry {
-  type: 'intent' | 'tool_started' | 'tool_completed' | 'rag' | 'policy' | 'workflow_step' | 'response' | 'plan'
+  type: 'intent' | 'tool_started' | 'tool_completed' | 'rag' | 'policy' | 'policy_evaluation' | 'document_verification' | 'workflow_step' | 'response' | 'plan' | 'escalation' | 'session_started' | 'session_ended' | 'message_user' | 'message_agent'
   timestamp: string
   label: string
   detail?: string
   status?: string
   authorized?: boolean
+  output?: unknown
+  input_params?: Record<string, any>
+  duration_ms?: number
+  evidence?: Record<string, any>
+  rule?: string
+  decision?: string
+  ticket_reference?: string
+  workflow_name?: string
+  step_number?: number
+  turn_index?: number | null
+  steps?: Array<{ step: number; tool: string; reason: string }>
 }
 
 export interface CallSummaryData {

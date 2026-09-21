@@ -1,14 +1,13 @@
 """
-ChromaDB Vector Store
+ChromaDB Persistent Vector Store
 
-Persistent vector store using ChromaDB with SentenceTransformer embedding function.
-Supports metadata-filtered semantic search by domain and doc_type.
+Wraps ChromaDB for persistent, metadata-filtered semantic search using
+sentence-transformer embeddings.
 
-Key design decisions:
-  - Uses ChromaDB's native SentenceTransformerEmbeddingFunction so embeddings
-    at query time are symmetric with embeddings at index time.
-  - Persistent client: data survives application restarts.
-  - Thread-safe for concurrent queries (ChromaDB handles internal locking).
+Key Design Decisions:
+- Persistent storage survives application restarts
+- Thread-safe for concurrent queries (ChromaDB handles internal locking)
+- Supports metadata-filtered search by domain, doc_type, etc.
 """
 
 from __future__ import annotations
@@ -27,11 +26,10 @@ logger = logging.getLogger("rag.vector_store")
 
 class ChromaVectorStore:
     """
-    ChromaDB-backed vector store for the RAG pipeline.
+    Persistent ChromaDB vector store for semantic search.
 
-    - Uses SentenceTransformerEmbeddingFunction for symmetric semantic search
     - Persistent storage survives application restarts
-    - Thread-safe for concurrent queries
+    - Thread-safe for concurrent queries (ChromaDB handles internal locking)
     - Supports metadata-filtered search by domain, doc_type, etc.
     """
 
@@ -69,8 +67,7 @@ class ChromaVectorStore:
         logger.info(
             f"ChromaDB initialized: collection='{self.config.chroma_collection_name}', "
             f"model='{self.config.embedding_model}', "
-            f"existing_docs={self._collection.count()}, "
-            f"path='{self.config.chroma_dir}'"
+            f"existing_docs={self._collection.count()}"
         )
 
     def upsert_documents(self, chunks: List[KBChunk]) -> int:
@@ -112,9 +109,8 @@ class ChromaVectorStore:
                 metadatas=metadatas,
             )
             total += len(batch)
-            logger.info(f"Upserted batch {i // batch_size + 1}: {len(batch)} chunks")
 
-        logger.info(f"Total upserted {total} chunks into ChromaDB")
+        logger.info(f"Upserted {total} chunks into ChromaDB")
         return total
 
     def search(
@@ -154,14 +150,9 @@ class ChromaVectorStore:
             where_filter = {"doc_type": {"$eq": doc_type_filter}}
 
         try:
-            count = self._collection.count()
-            if count == 0:
-                logger.warning("ChromaDB collection is empty")
-                return []
-
             results = self._collection.query(
                 query_texts=[query],
-                n_results=min(top_k, count),
+                n_results=min(top_k, self._collection.count() or top_k),
                 where=where_filter,
                 include=["documents", "metadatas", "distances"],
             )
@@ -172,7 +163,7 @@ class ChromaVectorStore:
         search_results = []
         if results and results["ids"] and results["ids"][0]:
             for idx, doc_id in enumerate(results["ids"][0]):
-                # ChromaDB returns cosine distances (lower = more similar)
+                # ChromaDB returns distances (lower = more similar for cosine)
                 # Convert to similarity score: score = 1 - distance
                 distance = results["distances"][0][idx] if results["distances"] else 0.0
                 score = max(0.0, 1.0 - distance)

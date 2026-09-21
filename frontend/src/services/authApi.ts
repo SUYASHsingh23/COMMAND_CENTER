@@ -24,6 +24,9 @@ export interface CustomerProfile {
   is_active: boolean
   last_login_at: string | null
   created_at: string
+  account_status?: string // 'active' | 'suspended'
+  balance?: number
+  insurance_type?: string // 'health' | 'motor' | 'home'
 }
 
 // ─── In-memory access token (never persisted to localStorage) ─────────────────

@@ -94,6 +94,9 @@ class PlanExecutor:
 
         if not params.get("invoice_id") and "invoice_id" in resolved_context:
             params["invoice_id"] = resolved_context["invoice_id"]
+        # Also fill invoice_number from context if not provided
+        if not params.get("invoice_number") and "invoice_number" in resolved_context:
+            params["invoice_number"] = resolved_context["invoice_number"]
 
         if step.tool == "create_ticket":
             if "issue" in params and "issue_type" not in params:
@@ -102,6 +105,14 @@ class PlanExecutor:
 
         elif step.tool == "issue_refund":
             params.setdefault("reason", "Customer billing dispute")
+            # Normalize: if planner used 'invoice_number' key, promote it to 'invoice_id'
+            # The _dispatch function accepts either invoice_id (UUID) or invoice_number (string)
+            inv_num = params.pop("invoice_number", None)
+            if inv_num and not params.get("invoice_id"):
+                params["invoice_id"] = inv_num  # _dispatch handles string lookup by number
+            # Fall back to resolved context if still missing
+            if not params.get("invoice_id") and "invoice_number" in resolved_context:
+                params["invoice_id"] = resolved_context["invoice_number"]
             if not params.get("invoice_id") and "invoice_id" in resolved_context:
                 params["invoice_id"] = resolved_context["invoice_id"]
 
@@ -153,8 +164,19 @@ class PlanExecutor:
                 ctx["customer_id"] = cust["customer_id"]
             if cust.get("account_number"):
                 ctx["account_number"] = cust["account_number"]
+        # Store invoice detail context (from get_invoice_detail)
+        invoice_detail = output.get("invoice")
+        if isinstance(invoice_detail, dict):
+            if invoice_detail.get("invoice_id"):
+                ctx["invoice_id"] = invoice_detail["invoice_id"]
+            if invoice_detail.get("invoice_number"):
+                ctx["invoice_number"] = invoice_detail["invoice_number"]
+        # Also store from get_invoice list (first invoice)
         invoices = output.get("invoices")
         if isinstance(invoices, list) and invoices:
             first = invoices[0]
-            if isinstance(first, dict) and first.get("invoice_id"):
-                ctx["invoice_id"] = first["invoice_id"]
+            if isinstance(first, dict):
+                if first.get("invoice_id"):
+                    ctx["invoice_id"] = first["invoice_id"]
+                if first.get("invoice_number"):
+                    ctx["invoice_number"] = first["invoice_number"]

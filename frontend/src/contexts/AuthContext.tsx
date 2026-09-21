@@ -74,8 +74,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     restore()
+
     return () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+    }
+  }, [handleTokens])
+
+  // Listen to storage events to sync auth state across tabs
+  useEffect(() => {
+    const handleStorage = async (e: StorageEvent) => {
+      if (e.key === 'cc_refresh') {
+        if (!e.newValue) {
+          // Logged out in another tab
+          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+          tokenStore.clear()
+          setCustomer(null)
+        } else if (!tokenStore.getAccess()) {
+          // Logged in in another tab, let's restore here too
+          setIsLoading(true)
+          try {
+            const tokens = await authApi.refresh(e.newValue)
+            await handleTokens(tokens)
+          } catch {
+            tokenStore.clear()
+          } finally {
+            setIsLoading(false)
+          }
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+
+    return () => {
+      window.removeEventListener('storage', handleStorage)
     }
   }, [handleTokens])
 

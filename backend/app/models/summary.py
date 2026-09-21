@@ -39,3 +39,20 @@ class Escalation(Base):
     # Who resolved it and when
     resolved_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PlanEvent(Base):
+    """Persists the AI planner's decision for each turn — tools chosen, direct answer flag."""
+    __tablename__ = "plan_event"
+
+    plan_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversation.conversation_id", ondelete="CASCADE"), nullable=False
+    )
+    # turn_index mirrors Message.turn_index so events can be sorted chronologically
+    turn_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    direct_answer: Mapped[bool] = mapped_column(Boolean, default=False)
+    # JSON list of {"step": int, "tool": str, "reason": str, "params": {}}
+    steps: Mapped[list] = mapped_column(JSONB, default=list)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+

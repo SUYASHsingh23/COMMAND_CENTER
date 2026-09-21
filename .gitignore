@@ -1,10 +1,35 @@
+# Dependencies
 node_modules/
-#.chroma_db/
+
+# Python
 __pycache__/
-#*.pyc
+*.py[cod]
+*$py.class
 venv/
 .venv/
+env/
+
+# Environment configurations (NEVER commit secrets or API keys)
 .env
+.env.local
+.env.*.local
+*.env
+!*.env.example
+
+# Build and distribution outputs
 dist/
 build/
+*.egg-info/
+
+# Operating system files
 .DS_Store
+Thumbs.db
+
+# IDE and editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log

@@ -32,15 +32,20 @@ _REGISTRY: dict[str, ToolSchema] = {
     ),
     "get_invoice_detail": ToolSchema(
         name="get_invoice_detail",
-        description="Get full detail of a specific invoice",
+        description="Get full detail of a specific invoice including all line items. Use invoice_id (UUID) or invoice_number.",
         params={"invoice_id": "str"},
         required_params=["invoice_id"],
     ),
     "issue_refund": ToolSchema(
         name="issue_refund",
-        description="Issue a refund for an invoice",
-        params={"invoice_id": "str", "amount": "float", "reason": "str"},
-        required_params=["invoice_id", "amount", "reason"],
+        description=(
+            "Issue a refund for a billing invoice. Use after validating the customer's claim. "
+            "Accepts invoice_id (UUID) or invoice_number (e.g. INV-2026-SROVER-01). "
+            "For overcharge: specify the overcharged amount. "
+            "For accidental overpayment: specify the excess amount (amount_paid minus invoice total)."
+        ),
+        params={"invoice_id": "str", "invoice_number": "str", "amount": "float", "reason": "str"},
+        required_params=["amount", "reason"],  # invoice_id OR invoice_number accepted; executor normalizes
         requires_auth=True,
     ),
     "get_claim_status": ToolSchema(
@@ -51,8 +56,8 @@ _REGISTRY: dict[str, ToolSchema] = {
     ),
     "get_policy_coverage": ToolSchema(
         name="get_policy_coverage",
-        description="Get coverage details, limits, deductibles, and exclusions for a customer's active insurance plan",
-        params={"customer_id": "str", "plan": "str"},
+        description="Search and get the insurance policy knowledge base for coverage details, inclusions, exclusions, deductibles, waiting periods, and claim limits for a customer's active plan. Use the customer's exact question as the query parameter.",
+        params={"customer_id": "str", "plan": "str", "query": "str"},
         required_params=["customer_id"],
     ),
     "create_ticket": ToolSchema(
@@ -119,4 +124,8 @@ class ToolRegistry:
         missing = [p for p in schema.required_params if p not in params or params[p] is None]
         if missing:
             return False, f"Tool {name} missing required params: {missing}"
+        # Special check: issue_refund requires at least one invoice reference
+        if name == "issue_refund":
+            if not params.get("invoice_id") and not params.get("invoice_number"):
+                return False, "Tool issue_refund requires either invoice_id or invoice_number"
         return True, ""

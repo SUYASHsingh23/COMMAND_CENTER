@@ -59,7 +59,7 @@ export function useSupervisorStream() {
             type: 'response',
             timestamp: ts,
             label: 'Response Generated',
-            detail: event.text.slice(0, 80) + (event.text.length > 80 ? '…' : ''),
+            detail: event.text,
           })
           break
 
@@ -88,7 +88,8 @@ export function useSupervisorStream() {
           })
           break
 
-        case 'tool.completed':
+        case 'tool.completed': {
+          const toolTitle = (event.tool_name || 'tool').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
           store.addToolExecution(sid, {
             exec_id: crypto.randomUUID(),
             conversation_id: '',
@@ -102,12 +103,15 @@ export function useSupervisorStream() {
           store.addTimelineEntry(sid, {
             type: 'tool_completed',
             timestamp: ts,
-            label: `Tool: ${event.tool_name}`,
-            detail: `${event.status} · ${event.duration_ms}ms`,
+            label: `Tool: ${toolTitle}`,
+            detail: `${event.status === 'success' ? 'Execution completed' : event.status} (${event.duration_ms}ms)`,
             status: event.status,
+            output: event.output,
+            input_params: event.input_params,
+            duration_ms: event.duration_ms,
           })
           break
-
+        }
 
         case 'policy.decision':
           store.addPolicyDecision(sid, {
@@ -127,22 +131,70 @@ export function useSupervisorStream() {
           })
           break
 
-        case 'workflow.step':
+        case 'workflow.step': {
+          const wfDisplay = (event.workflow_name || 'Workflow').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+          const stepDisplay = (event.step_name || 'Step').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+          
+          let stepType: 'workflow_step' | 'document_verification' | 'policy_evaluation' | 'escalation' = 'workflow_step'
+          const sNameLower = (event.step_name || '').toLowerCase()
+          if (sNameLower.includes('verify') || sNameLower.includes('document') || event.evidence) {
+            stepType = 'document_verification'
+          } else if (sNameLower.includes('threshold') || sNameLower.includes('fraud') || sNameLower.includes('policy')) {
+            stepType = 'policy_evaluation'
+          } else if (sNameLower.includes('queue') || sNameLower.includes('escalat')) {
+            stepType = 'escalation'
+          }
+
           store.addWorkflowStep(sid, {
             workflow_name: event.workflow_name,
             step_name: event.step_name,
             step_status: event.step_status,
             steps_completed: event.steps_completed,
             timestamp: ts,
+            detail: event.detail,
+            evidence: event.evidence,
+            rule: event.rule,
+            decision: event.decision,
+            step_number: event.step_number,
           })
           store.addTimelineEntry(sid, {
-            type: 'workflow_step',
+            type: stepType,
             timestamp: ts,
-            label: `Workflow: ${event.workflow_name}`,
-            detail: `Step: ${event.step_name} — ${event.step_status}`,
+            label: `${wfDisplay} → ${stepDisplay}`,
+            detail: event.detail || `Step: ${event.step_name} — ${event.step_status}`,
             status: event.step_status,
+            evidence: event.evidence,
+            rule: event.rule,
+            decision: event.decision,
+            workflow_name: event.workflow_name,
+            step_number: event.step_number,
           })
           break
+        }
+
+        case 'plan.generated': {
+          const steps = (event.steps ?? []) as Array<{ tool: string; reason: string }>
+          if (event.direct_answer) {
+            store.addTimelineEntry(sid, {
+              type: 'plan',
+              timestamp: ts,
+              label: 'Plan: Direct Answer',
+              detail: 'No tools needed — responding from context',
+              status: 'success',
+            })
+          } else if (steps.length > 0) {
+            const toolNames = steps.map((s) => s.tool).join(', ')
+            const reasons = steps.map((s) => `${s.tool}: ${s.reason}`).join(' · ')
+            store.addTimelineEntry(sid, {
+              type: 'plan',
+              timestamp: ts,
+              label: `Plan: ${steps.length} tool${steps.length !== 1 ? 's' : ''} → ${toolNames}`,
+              detail: reasons,
+              status: 'in_progress',
+            })
+          }
+          break
+        }
 
         case 'escalation.created':
           store.setEscalated(sid)
@@ -175,7 +227,7 @@ export function useSupervisorStream() {
             type: 'response',
             timestamp: ts,
             label: `Call Summary: ${event.resolution}`,
-            detail: event.summary_text.slice(0, 100),
+            detail: event.summary_text,
             status: event.resolution,
           })
           break

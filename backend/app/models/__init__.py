@@ -3,7 +3,7 @@ from app.models.conversation import Conversation, Message, ConversationState, In
 from app.models.memory import Memory
 from app.models.execution import ToolExecution, WorkflowExecution, PolicyDecision
 from app.models.knowledge import KnowledgeDocument, KnowledgeRetrieval
-from app.models.summary import CallSummary, Escalation
+from app.models.summary import CallSummary, Escalation, PlanEvent
 from app.models.billing import BillingPlan, Invoice, BillingTransaction, RefundRequest, BillingAlert
 from app.models.scheduling import ServiceType, Agent, Appointment, AppointmentNote, AgentAvailabilityBlock
 
@@ -25,6 +25,7 @@ __all__ = [
     "KnowledgeRetrieval",
     "CallSummary",
     "Escalation",
+    "PlanEvent",
     "BillingPlan",
     "Invoice",
     "BillingTransaction",

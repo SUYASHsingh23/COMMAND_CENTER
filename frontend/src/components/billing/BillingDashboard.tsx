@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supervisorWsClient } from '@/services/websocket'
+import { QueueEvaluationModal, QueueType } from './QueueEvaluationModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,7 @@ interface LineItem {
   discount: string
   tax_pct: string
   amount: string
+  note?: string
 }
 
 interface Transaction {
@@ -114,6 +116,8 @@ interface RefundRequest {
   refund_id: string
   refund_number: string | null
   customer_id: string
+  customer_name?: string | null
+  customer_email?: string | null
   requested_amount: number
   approved_amount: number | null
   currency: string
@@ -254,6 +258,7 @@ export default function BillingDashboard() {
   const [invoiceDetail, setInvoiceDetail] = useState<InvoiceFull | null>(null)
   const [txnFilter, setTxnFilter] = useState('')
   const [showRefundModal, setShowRefundModal] = useState(false)
+  const [activeQueueModal, setActiveQueueModal] = useState<QueueType | null>(null)
   const [loading, setLoading] = useState(false)
   const [now, setNow] = useState(new Date())
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -270,23 +275,29 @@ export default function BillingDashboard() {
     fetch(`${API}/stats`).then(r => r.json()).then(setStats).catch(() => {})
     fetch(`${API}/refunds?status=under_review`).then(r => r.json()).then(setAllRefunds).catch(() => {})
     fetch(`${API}/refunds?investigation_only=true`).then(r => r.json()).then(setAllInvestigations).catch(() => {})
-    fetch('/api/v1/analytics/escalations?status=open&limit=30').then(r => r.json()).then(setAllEscalations).catch(() => {})
+    fetch('/api/v1/analytics/escalations?status=all&limit=50').then(r => r.json()).then(setAllEscalations).catch(() => {})
   }, [])
 
   const refreshQueues = () => {
     fetch(`${API}/refunds?status=under_review`).then(r => r.json()).then(setAllRefunds).catch(() => {})
     fetch(`${API}/refunds?investigation_only=true`).then(r => r.json()).then(setAllInvestigations).catch(() => {})
-    fetch('/api/v1/analytics/escalations?status=open&limit=30').then(r => r.json()).then(setAllEscalations).catch(() => {})
+    fetch('/api/v1/analytics/escalations?status=all&limit=50').then(r => r.json()).then(setAllEscalations).catch(() => {})
     fetch(`${API}/stats`).then(r => r.json()).then(setStats).catch(() => {})
   }
 
-  // Listen for real-time invoice + customer updates
+  // Listen for real-time invoice, customer, and escalation events
   useEffect(() => {
     supervisorWsClient.connectSupervisor()
-    const unsubscribe = supervisorWsClient.on((evt) => {
-      if (evt.event === 'invoice.updated' || evt.event === 'customer.updated') {
+    const unsubscribe = supervisorWsClient.on((evt: any) => {
+      if (
+        evt.event === 'invoice.updated' ||
+        evt.event === 'customer.updated' ||
+        evt.event === 'escalation.created' ||
+        evt.event === 'escalation.updated' ||
+        evt.event === 'session.ended'
+      ) {
         // Refresh data for currently viewed customer
-        if (selected && (evt.customer_id === selected)) {
+        if (selected && evt.customer_id === selected) {
           selectCustomer(selected)
         }
         // Always refresh queues and stats on any update
@@ -582,26 +593,226 @@ export default function BillingDashboard() {
           ) : null}
         </main>
 
-        {/* ── Right Panel — Refund Queue + Investigations + Escalations ─── */}
+        {/* ── Right Panel — Human Evaluation Queue Action Hub ─── */}
         <aside style={{
           width: 320, borderLeft: '1px solid var(--border)',
           display: 'flex', flexDirection: 'column', flexShrink: 0,
           background: 'var(--bg-secondary)', overflowY: 'auto',
+          padding: '16px 14px', gap: 14,
         }}>
-          <RefundQueuePanel
-            refunds={allRefunds}
-            onRefresh={refreshQueues}
-          />
-          <div style={{ borderTop: '2px solid var(--border)', flexShrink: 0 }} />
-          <InvestigationQueuePanel
-            investigations={allInvestigations}
-            onRefresh={refreshQueues}
-          />
-          <div style={{ borderTop: '2px solid var(--border)', flexShrink: 0 }} />
-          <EscalationHumanQueuePanel
-            escalations={allEscalations}
-            onRefresh={refreshQueues}
-          />
+          {/* Header */}
+          <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Human Evaluation Hub
+              </div>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', background: '#10b981',
+                boxShadow: '0 0 6px #10b981',
+              }} />
+            </div>
+          </div>
+
+          {/* 3 Prominent Queue Cards */}
+          {/* Card 1: Refund Approvals */}
+          <div style={{
+            background: 'var(--bg-primary)',
+            border: '1px solid rgba(245,158,11,0.3)',
+            borderRadius: 'var(--radius-xl)',
+            padding: '14px 14px',
+            display: 'flex', flexDirection: 'column', gap: 12,
+            boxShadow: '0 2px 8px rgba(245,158,11,0.06)',
+            transition: 'border-color 0.15s ease',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 6,
+                  background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <line x1="12" y1="8" x2="12" y2="16" />
+                    <line x1="8" y1="12" x2="16" y2="12" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Refund Approvals
+                </div>
+              </div>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                background: allRefunds.length > 0 ? 'rgba(245,158,11,0.18)' : 'rgba(255,255,255,0.05)',
+                color: allRefunds.length > 0 ? '#f59e0b' : 'var(--text-muted)',
+              }}>
+                {allRefunds.length} Pending
+              </span>
+            </div>
+
+            <button
+              id="open-refund-queue-btn"
+              type="button"
+              onClick={() => setActiveQueueModal('refund')}
+              style={{
+                width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
+                background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
+                color: '#f59e0b', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(245,158,11,0.2)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(245,158,11,0.12)'
+              }}
+            >
+              Open Refund Workspace
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Card 2: Fraud & Rate Investigations */}
+          <div style={{
+            background: 'var(--bg-primary)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 'var(--radius-xl)',
+            padding: '14px 14px',
+            display: 'flex', flexDirection: 'column', gap: 12,
+            boxShadow: '0 2px 8px rgba(239,68,68,0.06)',
+            transition: 'border-color 0.15s ease',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 6,
+                  background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Investigations
+                </div>
+              </div>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                background: allInvestigations.length > 0 ? 'rgba(239,68,68,0.18)' : 'rgba(255,255,255,0.05)',
+                color: allInvestigations.length > 0 ? '#ef4444' : 'var(--text-muted)',
+              }}>
+                {allInvestigations.length} Flagged
+              </span>
+            </div>
+
+            <button
+              id="open-investigation-queue-btn"
+              type="button"
+              onClick={() => setActiveQueueModal('investigation')}
+              style={{
+                width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
+                background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
+                color: '#ef4444', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(239,68,68,0.2)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(239,68,68,0.12)'
+              }}
+            >
+              Open Investigation Workspace
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Card 3: Human Escalation Queue */}
+          <div style={{
+            background: 'var(--bg-primary)',
+            border: '1px solid rgba(249,115,22,0.3)',
+            borderRadius: 'var(--radius-xl)',
+            padding: '14px 14px',
+            display: 'flex', flexDirection: 'column', gap: 12,
+            boxShadow: '0 2px 8px rgba(249,115,22,0.06)',
+            transition: 'border-color 0.15s ease',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 6,
+                  background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.25)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Escalation Queue
+                </div>
+              </div>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                background: allEscalations.filter(e => e.status === 'open' || e.status === 'assigned').length > 0 ? 'rgba(249,115,22,0.18)' : 'rgba(255,255,255,0.05)',
+                color: allEscalations.filter(e => e.status === 'open' || e.status === 'assigned').length > 0 ? '#f97316' : 'var(--text-muted)',
+              }}>
+                {allEscalations.filter(e => e.status === 'open' || e.status === 'assigned').length} Open
+              </span>
+            </div>
+
+            <button
+              id="open-escalation-queue-btn"
+              type="button"
+              onClick={() => setActiveQueueModal('escalation')}
+              style={{
+                width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
+                background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.3)',
+                color: '#f97316', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(249,115,22,0.2)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(249,115,22,0.12)'
+              }}
+            >
+              Open Escalation Workspace
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Quick Stats summary */}
+          <div style={{
+            marginTop: 'auto',
+            padding: '12px', borderRadius: 'var(--radius-lg)',
+            background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total Awaiting Action</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-primary)' }}>
+              {allRefunds.length + allInvestigations.length + allEscalations.filter(e => e.status === 'open' || e.status === 'assigned').length} Cases
+            </span>
+          </div>
         </aside>
       </div>
 
@@ -620,6 +831,19 @@ export default function BillingDashboard() {
             selectCustomer(selected)
             refreshQueues()
           }}
+        />
+      )}
+
+      {/* ── Full-Screen Human Evaluation Modal ─────────────────────────────── */}
+      {activeQueueModal && (
+        <QueueEvaluationModal
+          initialQueue={activeQueueModal}
+          onClose={() => setActiveQueueModal(null)}
+          onRefreshAll={refreshQueues}
+          refunds={allRefunds}
+          investigations={allInvestigations}
+          escalations={allEscalations}
+          threshold={stats?.refund_threshold || 5000}
         />
       )}
     </div>
@@ -880,7 +1104,9 @@ function InvoicesTab({ invoices, expandedId, invoiceDetail, onExpand }: {
               {inv.billing_period_start ? `${fmtDate(inv.billing_period_start)} – ${fmtDate(inv.billing_period_end)}` : '—'}
             </span>
             <span style={{ fontSize: 12, fontWeight: 600 }}>₹{fmt(inv.total_amount)}</span>
-            <span style={{ fontSize: 12, color: '#22c55e' }}>₹{fmt(inv.amount_paid)}</span>
+            <span style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ color: '#22c55e' }}>₹{fmt(inv.amount_paid)}</span>
+            </span>
             <div>
               <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{fmtDate(inv.due_date)}</span>
               {inv.late_fee_applied && <span style={{ fontSize: 9, color: '#f59e0b', marginLeft: 4 }}>+late fee</span>}
@@ -927,16 +1153,34 @@ function InvoiceDetailExpanded({ invoice: inv }: { invoice: InvoiceFull }) {
         <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1fr 1fr', padding: '6px 12px', background: 'var(--bg-primary)', fontSize: 10, color: 'var(--text-secondary)', letterSpacing: '0.06em', gap: 8 }}>
           <span>DESCRIPTION</span><span>QTY</span><span>UNIT PRICE</span><span>DISCOUNT</span><span>TAX%</span><span style={{ textAlign: 'right' }}>AMOUNT</span>
         </div>
-        {inv.line_items.map((li, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1fr 1fr', padding: '8px 12px', fontSize: 12, borderTop: i > 0 ? '1px solid var(--border)' : undefined, gap: 8 }}>
-            <span>{li.description}</span>
-            <span>{li.quantity}</span>
-            <span>₹{li.unit_price}</span>
-            <span style={{ color: '#22c55e' }}>{parseFloat(li.discount) > 0 ? `−₹${li.discount}` : '—'}</span>
-            <span>{li.tax_pct}%</span>
-            <span style={{ textAlign: 'right', fontWeight: 600 }}>₹{li.amount}</span>
-          </div>
-        ))}
+        {inv.line_items.map((li, i) => {
+          const isOvercharge = /add.on|overcharge|error|addon/i.test(li.description + (li.note || ''))
+          return (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1fr 1fr', padding: '8px 12px',
+              fontSize: 12, gap: 8,
+              borderTop: i > 0 ? `1px solid ${isOvercharge ? 'rgba(245,158,11,0.3)' : 'var(--border)'}` : undefined,
+              background: isOvercharge ? 'rgba(245,158,11,0.05)' : 'transparent',
+              borderLeft: isOvercharge ? '3px solid #f59e0b' : '3px solid transparent',
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {li.description}
+                {isOvercharge && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, color: '#f59e0b',
+                    background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)',
+                    padding: '1px 5px', borderRadius: 3, whiteSpace: 'nowrap',
+                  }}>OVERCHARGE</span>
+                )}
+              </span>
+              <span>{li.quantity}</span>
+              <span>₹{li.unit_price}</span>
+              <span style={{ color: '#22c55e' }}>{parseFloat(li.discount) > 0 ? `−₹${li.discount}` : '—'}</span>
+              <span>{li.tax_pct}%</span>
+              <span style={{ textAlign: 'right', fontWeight: 600, color: isOvercharge ? '#f59e0b' : 'inherit' }}>₹{li.amount}</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

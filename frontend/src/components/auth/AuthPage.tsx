@@ -1,5 +1,24 @@
-import React, { useState, useId } from 'react'
+import React, { useState, useId, useRef, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+
+interface PolicyHolderAccount {
+  name: string
+  username: string
+  pass: string
+}
+
+const POLICY_HOLDERS: PolicyHolderAccount[] = [
+  { name: 'Anita Desai', username: 'anita.desai@example.com', pass: 'AnitaPass123!' },
+  { name: 'Rajan Mehta', username: 'rajan.mehta@example.com', pass: 'RajanPass123!' },
+  { name: 'Suresh Kumar', username: 'suresh.kumar@example.com', pass: 'SureshPass123!' },
+  { name: 'Kavitha Nair', username: 'kavitha.nair@example.com', pass: 'KavithaPass123!' },
+  { name: 'Priya Sharma', username: 'priya.sharma@example.com', pass: 'PriyaPass123!' },
+  { name: 'Amit Patel', username: 'amit.patel@email.com', pass: 'AmitPass123!' },
+  { name: 'Priya Nair', username: 'priya.nair@email.com', pass: 'PriyaPass123!' },
+  { name: 'Rahul Sharma', username: 'rahul.sharma@email.com', pass: 'RahulPass123!' },
+  { name: 'Sneha Reddy', username: 'sneha.reddy@email.com', pass: 'SnehaPass123!' },
+  { name: 'Vikram Singh', username: 'vikram.singh@email.com', pass: 'VikramPass123!' },
+]
 
 type Mode = 'login' | 'register'
 
@@ -41,11 +60,58 @@ export function AuthPage() {
   const [errors, setErrors] = useState<FieldError>({})
   const [loading, setLoading] = useState(false)
 
+  // Policy holder dropdown state
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [justFilled, setJustFilled] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown on outside click or Escape key
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false)
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsDropdownOpen(false)
+      }
+    }
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleKeyDown)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isDropdownOpen])
+
+  const handleSelectAccount = (acc: PolicyHolderAccount) => {
+    setEmail(acc.username)
+    setPassword(acc.pass)
+    setErrors({})
+    setIsDropdownOpen(false)
+    setJustFilled(true)
+    setTimeout(() => setJustFilled(false), 1200)
+  }
+
+  const filteredAccounts = POLICY_HOLDERS.filter(acc => {
+    const q = searchQuery.toLowerCase().trim()
+    if (!q) return true
+    return (
+      acc.name.toLowerCase().includes(q) ||
+      acc.username.toLowerCase().includes(q)
+    )
+  })
+
   const reset = (nextMode: Mode) => {
     setMode(nextMode)
     setErrors({})
     setPassword('')
     setConfirmPassword('')
+    setIsDropdownOpen(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -144,7 +210,11 @@ export function AuthPage() {
               placeholder="arjun@insureai.in"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              style={{ ...styles.input, ...(errors.email ? styles.inputError : {}) }}
+              style={{
+                ...styles.input,
+                ...(errors.email ? styles.inputError : {}),
+                ...(justFilled ? { borderColor: '#10b981', boxShadow: '0 0 0 3px rgba(16,185,129,0.25)', transition: 'all 200ms ease' } : {}),
+              }}
             />
             {errors.email && <span style={styles.errorMsg}>{errors.email}</span>}
           </div>
@@ -178,7 +248,12 @@ export function AuthPage() {
                 placeholder="Min. 8 characters"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                style={{ ...styles.input, ...styles.passwordInput, ...(errors.password ? styles.inputError : {}) }}
+                style={{
+                  ...styles.input,
+                  ...styles.passwordInput,
+                  ...(errors.password ? styles.inputError : {}),
+                  ...(justFilled ? { borderColor: '#10b981', boxShadow: '0 0 0 3px rgba(16,185,129,0.25)', transition: 'all 200ms ease' } : {}),
+                }}
               />
               <button
                 type="button"
@@ -255,41 +330,228 @@ export function AuthPage() {
           </button>
         </p>
 
-        {/* Test credentials hint */}
+        {/* Policy Holder Accounts Dropdown with Instant Auto-Fill */}
         {mode === 'login' && (
-          <div style={{
-            marginTop: '16px',
-            padding: '12px 14px',
-            background: 'rgba(15,118,110,0.05)',
-            border: '1px solid rgba(15,118,110,0.18)',
-            borderRadius: '10px',
-            fontSize: '11px',
-            color: 'var(--text-muted)',
-            lineHeight: 1.6,
-            maxHeight: '180px',
-            overflowY: 'auto',
-          }}>
-            <div style={{ fontWeight: 600, color: 'var(--accent-primary)', marginBottom: '8px', fontSize: '12px', position: 'sticky', top: 0, paddingBottom: '4px', zIndex: 1, borderBottom: '1px solid var(--border-subtle)', background: 'rgba(250,248,245,0.95)' }}>🔑 Policy Holder Accounts</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {[
-                { name: 'Anita Desai', email: 'anita.desai@example.com', pass: 'AnitaPass123!' },
-                { name: 'Rajan Mehta', email: 'rajan.mehta@example.com', pass: 'RajanPass123!' },
-                { name: 'Suresh Kumar', email: 'suresh.kumar@example.com', pass: 'SureshPass123!' },
-                { name: 'Kavitha Nair', email: 'kavitha.nair@example.com', pass: 'KavithaPass123!' },
-                { name: 'Priya Sharma', email: 'priya.sharma@example.com', pass: 'PriyaPass123!' },
-                { name: 'Amit Patel', email: 'amit.patel@email.com', pass: 'AmitPass123!' },
-                { name: 'Priya Nair', email: 'priya.nair@email.com', pass: 'PriyaPass123!' },
-                { name: 'Rahul Sharma', email: 'rahul.sharma@email.com', pass: 'RahulPass123!' },
-                { name: 'Sneha Reddy', email: 'sneha.reddy@email.com', pass: 'SnehaPass123!' },
-                { name: 'Vikram Singh', email: 'vikram.singh@email.com', pass: 'VikramPass123!' },
-              ].map(c => (
-                <div key={c.email} style={{ display: 'flex', flexDirection: 'column', padding: '6px', background: 'var(--surface-2)', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>{c.name}</div>
-                  <div><span style={{opacity:0.7}}>Email:</span> <code style={{ color: 'var(--text-secondary)' }}>{c.email}</code></div>
-                  <div><span style={{opacity:0.7}}>Password:</span> <code style={{ color: 'var(--text-secondary)' }}>{c.pass}</code></div>
+          <div ref={dropdownRef} style={{ position: 'relative', marginTop: '16px' }}>
+            {/* Main Toggle Button */}
+            <button
+              id={`${id}-policy-holders-btn`}
+              type="button"
+              onClick={() => setIsDropdownOpen(prev => !prev)}
+              aria-expanded={isDropdownOpen}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                background: isDropdownOpen ? 'rgba(15,118,110,0.08)' : 'rgba(15,118,110,0.04)',
+                border: isDropdownOpen ? '1px solid rgba(15,118,110,0.35)' : '1px solid rgba(15,118,110,0.18)',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                transition: 'all 180ms ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)' }}>
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent-primary)' }}>
+                  Policy Holder Accounts
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  padding: '2px 7px',
+                  borderRadius: '12px',
+                  background: 'rgba(15,118,110,0.10)',
+                  color: 'var(--accent-primary)',
+                }}>
+                  {POLICY_HOLDERS.length}
+                </span>
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    color: 'var(--accent-primary)',
+                    transform: isDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 200ms ease',
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </div>
+            </button>
+
+            {/* Dropdown Menu */}
+            {isDropdownOpen && (
+              <div style={{
+                marginTop: '8px',
+                background: '#ffffff',
+                border: '1px solid var(--border)',
+                borderRadius: '12px',
+                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.10)',
+                overflow: 'hidden',
+                animation: 'fade-in 160ms ease',
+                zIndex: 50,
+              }}>
+                {/* Search Bar */}
+                <div style={{
+                  padding: '8px 10px',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  background: '#faf9f7',
+                }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="var(--text-muted)"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search accounts..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      autoFocus
+                      style={{
+                        width: '100%',
+                        padding: '6px 28px 6px 30px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border)',
+                        background: '#ffffff',
+                        color: 'var(--text-primary)',
+                        fontSize: '12px',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        style={{
+                          position: 'absolute',
+                          right: '8px',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          padding: '2px',
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Account List */}
+                <div style={{
+                  maxHeight: '260px',
+                  overflowY: 'auto',
+                  padding: '4px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                }}>
+                  {filteredAccounts.length === 0 ? (
+                    <div style={{
+                      padding: '16px',
+                      textAlign: 'center',
+                      color: 'var(--text-muted)',
+                      fontSize: '12px',
+                    }}>
+                      No accounts found
+                    </div>
+                  ) : (
+                    filteredAccounts.map(account => (
+                      <div
+                        key={account.username}
+                        onClick={() => handleSelectAccount(account)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleSelectAccount(account) }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          transition: 'background 120ms ease',
+                          background: 'transparent',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = 'rgba(15, 118, 110, 0.06)'
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'transparent'
+                        }}
+                      >
+                        <div style={{ minWidth: 0, textAlign: 'left' }}>
+                          <div style={{
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                          }}>
+                            {account.name}
+                          </div>
+                          <div style={{
+                            fontSize: '11px',
+                            color: 'var(--text-muted)',
+                            fontFamily: 'monospace',
+                            marginTop: '2px',
+                            display: 'flex',
+                            gap: '8px',
+                          }}>
+                            <span>{account.username}</span>
+                            <span>•</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>{account.pass}</span>
+                          </div>
+                        </div>
+
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{ color: 'var(--text-muted)', opacity: 0.5, flexShrink: 0, marginLeft: '8px' }}
+                        >
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

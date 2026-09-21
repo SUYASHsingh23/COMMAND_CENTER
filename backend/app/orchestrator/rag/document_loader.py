@@ -58,7 +58,7 @@ class DocumentLoader:
     Loads and chunks real-world Markdown policy wordings and JSON KB documents.
 
     Chunking Strategy:
-    - Markdown Policy Docs: Splits by sections (### SECTION, #### Clause) preserving hierarchy.
+    - Markdown / Text Policy Docs: Splits by sections (`### SECTION`, `#### Clause`) preserving hierarchy.
     - Each clause text is chunked into ~500-char paragraphs with 50-char overlap.
     - JSON KB: Each FAQ & section is loaded with question/answer pairing.
     """
@@ -82,8 +82,8 @@ class DocumentLoader:
         all_chunks: List[KBChunk] = []
         seen_ids: set = set()
 
-        # Recursively find .md files (policies/ subdir and root)
-        md_files = sorted(base_dir.rglob("*.md"))
+        # Recursively find .md and .txt files (policies/ subdir and root)
+        md_files = sorted(base_dir.rglob("*.md")) + sorted(base_dir.rglob("*.txt"))
         for doc_file in md_files:
             # Skip telecom leftover files
             if "telecom" in doc_file.stem.lower():
@@ -121,15 +121,16 @@ class DocumentLoader:
     def _infer_domain(self, file_stem: str) -> str:
         """Infer the insurance domain from a filename stem."""
         stem = file_stem.lower()
-        if "health" in stem:
+        if "health" in stem or "medical" in stem or "hospital" in stem or "shield" in stem:
             return "health_insurance"
-        elif "motor" in stem or "vehicle" in stem or "auto" in stem:
+        elif "motor" in stem or "vehicle" in stem or "auto" in stem or "car" in stem:
             return "motor_insurance"
-        elif "home" in stem or "property" in stem or "house" in stem:
+        elif "home" in stem or "property" in stem or "house" in stem or "protector" in stem:
             return "home_insurance"
         elif "general" in stem:
             return "general_insurance"
-        return "general_insurance"
+        # Strip common suffixes and return as-is for unknown domains
+        return stem.replace("_kb", "").replace("_policy_wording", "").replace("_policy", "")
 
     def _load_markdown_file(self, file_path: Path) -> List[KBChunk]:
         """

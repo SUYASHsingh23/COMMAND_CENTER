@@ -1,11 +1,13 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { AuthPage } from '@/components/auth/AuthPage'
+import { CustomerPortal } from '@/components/portal/CustomerPortal'
 import { VoiceInterface } from '@/components/conversation/VoiceInterface'
 import { CommandCenter } from '@/components/command-center/Dashboard'
 import { CRMDashboard } from '@/components/crm/CRMDashboard'
 import BillingDashboard from '@/components/billing/BillingDashboard'
 import SchedulingDashboard from '@/components/scheduling/SchedulingDashboard'
+import { useConversationStore } from '@/store/conversation'
 
 /** Full-screen loading spinner shown while restoring session from stored refresh token. */
 function LoadingScreen() {
@@ -62,16 +64,21 @@ function SupervisorNav() {
       <button style={linkStyle(path.startsWith('/billing'))} onClick={() => go('/billing')}>Premium &amp; Claims</button>
       <button style={linkStyle(path.startsWith('/scheduling'))} onClick={() => go('/scheduling')}>Surveyor Scheduling</button>
       <div style={{ flex: 1 }} />
-      <button style={linkStyle(false)} onClick={() => go('/')}>← Customer Portal</button>
+      <button style={linkStyle(false)} onClick={() => go('/portal')}>← Customer Portal</button>
     </nav>
   )
 }
 
-/** Inner router — only rendered once auth context is ready. */
+// ── Inner router — only rendered once auth context is ready. ────────
 function Router() {
   const { isAuthenticated, isLoading } = useAuth()
+  const [path, setPath] = useState(() => window.location.pathname)
 
-  const path = window.location.pathname
+  useEffect(() => {
+    const handleLocationChange = () => setPath(window.location.pathname)
+    window.addEventListener('popstate', handleLocationChange)
+    return () => window.removeEventListener('popstate', handleLocationChange)
+  }, [])
 
   // ── Public supervisor / back-office routes (NO auth required) ─────────────
   if (path.startsWith('/supervisor')) return <><SupervisorNav /><CommandCenter /></>
@@ -79,10 +86,42 @@ function Router() {
   if (path.startsWith('/billing'))    return <><SupervisorNav /><BillingDashboard /></>
   if (path.startsWith('/scheduling')) return <><SupervisorNav /><SchedulingDashboard /></>
 
-  // ── Customer portal routes (auth required) ────────────────────────────────
+  // ── Customer portal routes ────────────────────────────────────────────────
   if (isLoading) return <LoadingScreen />
-  if (!isAuthenticated) return <AuthPage />
-  return <VoiceInterface />
+
+  // Unauthenticated users can only view /auth
+  if (!isAuthenticated) {
+    if (path !== '/auth') {
+      window.history.replaceState(null, '', '/auth')
+    }
+    return <AuthPage />
+  }
+
+  // Authenticated users:
+  if (path === '/auth') {
+    window.history.replaceState(null, '', '/portal')
+    return <CustomerPortal />
+  }
+
+  if (path === '/' || path === '/portal') {
+    return <CustomerPortal />
+  }
+
+  if (path === '/call') {
+    return <VoiceInterface />
+  }
+
+  // Backward compatibility: redirect /chat to /call if active session, else /portal
+  if (path === '/chat') {
+    const hasActiveSession = !!useConversationStore.getState().session
+    const target = hasActiveSession ? '/call' : '/portal'
+    window.history.replaceState(null, '', target)
+    return hasActiveSession ? <VoiceInterface /> : <CustomerPortal />
+  }
+
+  // Fallback for any unknown route
+  window.history.replaceState(null, '', '/portal')
+  return <CustomerPortal />
 }
 
 export default function App() {

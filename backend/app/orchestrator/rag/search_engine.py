@@ -5,17 +5,12 @@ Combines ChromaDB (semantic search with metadata filtering) + FAISS (fast ANN re
 + Redis (query result caching) into a single, production-grade search interface.
 
 Uses Reciprocal Rank Fusion (RRF) to merge results from both retrieval sources.
-
-BACKWARD COMPATIBILITY:
-  This module exposes the same RAGManager / RAGResult / RetrievedPassage interface
-  as the previous implementation so agent.py requires zero changes.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -28,17 +23,15 @@ from .vector_store import ChromaVectorStore
 logger = logging.getLogger("rag.search_engine")
 
 
-# ── New-style result (used by RAGSearchEngine) ─────────────────────────────────
-
 @dataclass
-class RAGSearchResult:
+class RAGResult:
     """A single RAG search result with content and provenance metadata."""
 
     content: str
     source: str              # e.g., "motor_insurance_kb.json"
     domain: str              # e.g., "motor_insurance"
     section_title: str       # e.g., "Zero Depreciation Cover"
-    doc_type: str            # "faq" | "section" | "paragraph"
+    doc_type: str            # "faq" | "section" | "paragraph" | "policy_clause"
     score: float             # 0.0 to 1.0
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -53,36 +46,6 @@ class RAGSearchResult:
             "metadata": self.metadata,
         }
 
-
-# ── Backward-compatible result types (used by agent.py / manager interface) ────
-
-@dataclass
-class RetrievedPassage:
-    """Backward-compatible passage type matching the old RAGManager interface."""
-    doc_id: str
-    chunk_id: str
-    title: str
-    category: str
-    content: str
-    score: float   # cosine similarity [0, 1]
-
-
-@dataclass
-class RAGResult:
-    """Backward-compatible result type matching the old RAGManager interface."""
-    query: str
-    passages: list[RetrievedPassage] = field(default_factory=list)
-
-    def to_context_block(self) -> str:
-        if not self.passages:
-            return ""
-        lines = ["[KNOWLEDGE BASE]:"]
-        for p in self.passages:
-            lines.append(f"  [{p.category.upper()}] {p.title}: {p.content}")
-        return "\n".join(lines)
-
-
-# ── Core Search Engine ─────────────────────────────────────────────────────────
 
 class RAGSearchEngine:
     """
@@ -112,11 +75,10 @@ class RAGSearchEngine:
     async def initialize(self) -> Dict[str, Any]:
         """
         Full initialization pipeline:
-        1. Load JSON knowledge base documents
-        2. Chunk documents
-        3. Upsert into ChromaDB (skips if already indexed)
-        4. Build FAISS index from ChromaDB embeddings
-        5. Connect Redis cache
+        1. Load and chunk all knowledge base documents (policies/ + faqs/)
+        2. Upsert into ChromaDB (skips if already indexed)
+        3. Build FAISS index from ChromaDB embeddings
+        4. Connect Redis cache (graceful degradation if unavailable)
 
         Returns:
             Status dict with component health information.
@@ -156,20 +118,24 @@ class RAGSearchEngine:
                     else:
                         status["faiss"] = "empty"
                 except Exception as e:
-                    logger.warning(f"FAISS index build failed (non-fatal): {e}")
-                    status["faiss"] = f"error: {e}"
+                    logger.warning(f"FAISS index build failed: {e}")
+                    status["faiss"] = f"degraded: {e}"
 
-                # 4. Connect Redis cache
-                redis_ok = await self.cache.initialize()
-                status["redis"] = "healthy" if redis_ok else "unavailable"
+                # 4. Connect Redis cache (optional, graceful degradation)
+                try:
+                    redis_ok = await self.cache.initialize()
+                    status["redis"] = "healthy" if redis_ok else "unavailable"
+                except Exception as e:
+                    logger.warning(f"Redis connection failed: {e}")
+                    status["redis"] = f"unavailable: {e}"
 
                 self._initialized = True
+                status["status"] = "ready"
                 logger.info(f"RAG Search Engine initialized: {status}")
 
             except Exception as e:
+                status["status"] = f"error: {e}"
                 logger.error(f"RAG initialization failed: {e}", exc_info=True)
-                status["error"] = str(e)
-                self._initialized = True  # Allow degraded operation
 
             return status
 
@@ -179,18 +145,26 @@ class RAGSearchEngine:
         top_k: Optional[int] = None,
         domain: Optional[str] = None,
         doc_type: Optional[str] = None,
-    ) -> List[RAGSearchResult]:
+    ) -> List[RAGResult]:
         """
-        Hybrid semantic search: ChromaDB + FAISS, merged with RRF.
+        Hybrid search combining ChromaDB + FAISS with Redis caching.
+
+        Pipeline:
+        1. Check Redis cache — return on hit
+        2. Run ChromaDB semantic search (metadata-filtered)
+        3. Run FAISS ANN search (pure speed)
+        4. Merge via Reciprocal Rank Fusion
+        5. Cache results in Redis
+        6. Return top-K results
 
         Args:
-            query: The search query text
-            top_k: Number of results to return (defaults to config.top_k)
-            domain: Optional filter by domain ("health_insurance", "motor_insurance", "home_insurance")
-            doc_type: Optional filter by doc_type ("faq", "section", "policy_clause")
+            query: Natural language search query
+            top_k: Number of results (default from config)
+            domain: Optional domain filter ("motor_insurance", "health_insurance", "home_insurance")
+            doc_type: Optional doc type filter ("faq", "section", "paragraph", "policy_clause")
 
         Returns:
-            List of RAGSearchResult objects sorted by relevance score
+            List of RAGResult objects sorted by relevance score
         """
         if not self._initialized:
             logger.warning("RAG engine not initialized, returning empty results")
@@ -202,7 +176,7 @@ class RAGSearchEngine:
         cached = await self.cache.get(query, domain)
         if cached:
             return [
-                RAGSearchResult(
+                RAGResult(
                     content=r["content"],
                     source=r.get("source", ""),
                     domain=r.get("domain", ""),
@@ -236,6 +210,7 @@ class RAGSearchEngine:
                 for doc_id, score in faiss_hits:
                     chunk = self._chunk_map.get(doc_id)
                     if chunk:
+                        # Apply domain filter manually for FAISS (no built-in metadata filter)
                         if domain and chunk.domain != domain:
                             continue
                         if doc_type and chunk.doc_type != doc_type:
@@ -261,12 +236,12 @@ class RAGSearchEngine:
         # 4. Merge via Reciprocal Rank Fusion (RRF)
         merged = self._reciprocal_rank_fusion(chroma_results, faiss_results, k=k)
 
-        # 5. Convert to RAGSearchResult objects
-        results: List[RAGSearchResult] = []
+        # 5. Convert to RAGResult objects
+        results: List[RAGResult] = []
         for item in merged:
             meta = item.get("metadata", {})
             raw_score = item.get("score", item.get("rrf_score", 0.0))
-            result = RAGSearchResult(
+            result = RAGResult(
                 content=item["content"],
                 source=meta.get("source_file", ""),
                 domain=meta.get("domain", ""),
@@ -305,9 +280,19 @@ class RAGSearchEngine:
 
         RRF score = sum(1 / (rrf_k + rank)) for each source where the doc appears.
         This balances results from different systems without requiring score normalization.
+
+        Args:
+            chroma_results: Results from ChromaDB
+            faiss_results: Results from FAISS
+            k: Final number of results to return
+            rrf_k: RRF constant (default 60, standard in literature)
+
+        Returns:
+            Merged and reranked results
         """
         doc_scores: Dict[str, Dict[str, Any]] = {}
 
+        # Score ChromaDB results
         for rank, result in enumerate(chroma_results):
             doc_id = result["id"]
             rrf_score = 1.0 / (rrf_k + rank + 1)
@@ -315,6 +300,7 @@ class RAGSearchEngine:
                 doc_scores[doc_id] = {**result, "rrf_score": 0.0}
             doc_scores[doc_id]["rrf_score"] += rrf_score
 
+        # Score FAISS results
         for rank, result in enumerate(faiss_results):
             doc_id = result["id"]
             rrf_score = 1.0 / (rrf_k + rank + 1)
@@ -322,20 +308,27 @@ class RAGSearchEngine:
                 doc_scores[doc_id] = {**result, "rrf_score": 0.0}
             doc_scores[doc_id]["rrf_score"] += rrf_score
 
+        # Sort by RRF score descending
         merged = sorted(doc_scores.values(), key=lambda x: x["rrf_score"], reverse=True)
+
         return merged[:k]
 
     async def reload_documents(self) -> Dict[str, Any]:
-        """Hot-reload: re-read KB files, re-chunk, re-embed, rebuild FAISS, flush cache."""
+        """
+        Hot-reload: re-read KB files, re-chunk, re-embed, rebuild FAISS, flush cache.
+        Thread-safe via async lock.
+        """
         async with self._lock:
             logger.info("Hot-reloading RAG knowledge base...")
 
             if not self._initialized:
                 return await self.initialize()
 
+            # Clear existing data
             self.vector_store.clear()
             await self.cache.invalidate()
 
+            # Re-load everything
             self._chunks = self.document_loader.load_all()
             self._chunk_map = {c.id: c for c in self._chunks}
 
@@ -383,148 +376,8 @@ class RAGSearchEngine:
         logger.info("RAG Search Engine shut down")
 
 
-# ── Backward-Compatible RAGManager ────────────────────────────────────────────
-# Wraps RAGSearchEngine to expose the same interface that agent.py expects.
-
-class RAGManager:
-    """
-    Backward-compatible wrapper around RAGSearchEngine.
-
-    Exposes the original RAGManager interface:
-        search(query_embedding, top_k, min_score) → list[RetrievedPassage]
-        retrieve(query, query_embedding, db, conversation_id, top_k) → RAGResult
-
-    Internally delegates to the global rag_engine singleton which uses
-    ChromaDB + FAISS + Redis for production-grade retrieval.
-    """
-
-    def search(
-        self,
-        query_embedding: list[float],
-        top_k: int = 3,
-        min_score: float = 0.20,
-    ) -> list[RetrievedPassage]:
-        """
-        Execute a vector similarity search against ChromaDB.
-        Note: query_embedding is ignored — the new engine embeds at query time
-        using the same model as documents for symmetric search.
-        This method is kept for interface compatibility only.
-        """
-        # Sync search via ChromaDB direct (for callers that pre-compute embeddings)
-        collection = _get_legacy_collection()
-        if collection is None or collection.count() == 0:
-            logger.warning("RAG: knowledge base is empty — no results returned")
-            return []
-
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(top_k, collection.count()),
-            include=["documents", "metadatas", "distances"],
-        )
-
-        passages: list[RetrievedPassage] = []
-        docs      = results.get("documents", [[]])[0]
-        metas     = results.get("metadatas", [[]])[0]
-        distances = results.get("distances", [[]])[0]
-        ids       = results.get("ids", [[]])[0]
-
-        for doc, meta, dist, cid in zip(docs, metas, distances, ids):
-            # Cosine distance from chromadb: ∈ [0, 2]; convert to similarity ∈ [0, 1]
-            similarity = round(1.0 - dist / 2.0, 4)
-            if similarity < min_score:
-                continue
-            passages.append(
-                RetrievedPassage(
-                    doc_id=meta.get("doc_id", cid),
-                    chunk_id=cid,
-                    title=meta.get("section_title", meta.get("title", "")),
-                    category=meta.get("domain", meta.get("category", "general")),
-                    content=doc,
-                    score=similarity,
-                )
-            )
-
-        logger.debug(
-            "RAG search returned %d passages above min_score=%.2f",
-            len(passages), min_score,
-        )
-        return passages
-
-    async def retrieve(
-        self,
-        query: str,
-        query_embedding: list[float],
-        db,
-        conversation_id=None,
-        top_k: int = 3,
-    ) -> RAGResult:
-        """
-        Full retrieval pipeline using the new hybrid engine:
-        1. Hybrid search (ChromaDB + FAISS + RRF)
-        2. Log retrievals to knowledge_retrieval table (PostgreSQL)
-        """
-        # Use the global engine for hybrid search
-        search_results = await rag_engine.search(query, top_k=top_k)
-
-        # Convert to backward-compatible RetrievedPassage objects
-        passages: list[RetrievedPassage] = []
-        for r in search_results:
-            passages.append(
-                RetrievedPassage(
-                    doc_id=r.metadata.get("section_id", ""),
-                    chunk_id=r.source,
-                    title=r.section_title,
-                    category=r.domain,
-                    content=r.content,
-                    score=r.score,
-                )
-            )
-
-        # Log to PostgreSQL if we have a DB session and conversation_id
-        # We store without doc_id FK (chunks don't have KnowledgeDocument rows)
-        # Instead, pack section_title and source_file into the passage JSON field
-        if passages and conversation_id and db is not None:
-            try:
-                import json as _json
-                from app.models.knowledge import KnowledgeRetrieval  # noqa: PLC0415
-                for p in passages:
-                    try:
-                        # Store rich context including source file in passage field
-                        passage_data = {
-                            "content": p.content[:400],
-                            "title": p.title,
-                            "source": p.chunk_id,
-                            "domain": p.category,
-                        }
-                        record = KnowledgeRetrieval(
-                            conversation_id=conversation_id,
-                            query=query,
-                            doc_id=None,  # No FK — chunks are in ChromaDB/FAISS, not knowledge_document
-                            passage=_json.dumps(passage_data, ensure_ascii=False)[:1000],
-                            relevance_score=p.score,
-                        )
-                        db.add(record)
-                    except Exception as exc:
-                        logger.error("RAG retrieval persist error: %s", exc)
-                await db.commit()
-            except Exception as exc:
-                logger.error("RAG retrieval DB log error: %s", exc)
-
-        return RAGResult(query=query, passages=passages)
-
-
-
-def _get_legacy_collection():
-    """
-    Return the ChromaDB collection from the new engine's vector store.
-    Used by RAGManager.search() for backward-compatible embedding-based queries.
-    """
-    if rag_engine.vector_store._initialized:
-        return rag_engine.vector_store._collection
-    return None
-
-
 # ── Global Singleton ───────────────────────────────────────────────────────────
-# Initialized once on app startup via seed_knowledge_base() in main.py
+# Initialized once on app startup via seed_knowledge_base() in main.py lifespan.
+# All application code imports rag_engine from here or from app.orchestrator.rag
 
 rag_engine = RAGSearchEngine()

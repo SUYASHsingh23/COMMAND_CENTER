@@ -41,7 +41,7 @@ class RAGConfig:
         default_factory=lambda: int(os.getenv("RAG_TOP_K", "5"))
     )
     min_relevance_score: float = field(
-        default_factory=lambda: float(os.getenv("RAG_MIN_SCORE", "0.20"))
+        default_factory=lambda: float(os.getenv("RAG_MIN_SCORE", "0.25"))
     )
     chunk_size: int = field(
         default_factory=lambda: int(os.getenv("RAG_CHUNK_SIZE", "500"))

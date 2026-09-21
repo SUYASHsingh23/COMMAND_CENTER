@@ -39,6 +39,13 @@ export const api = {
     return request<import('@/types/conversation').Message[]>(`/conversations/${conversation_id}/messages`)
   },
 
+  getCustomerHistory(customerId: string, limit: number = 5) {
+    return request<import('@/types/conversation').CustomerConversationHistoryItem[]>(
+      `/conversations/customer/${customerId}/history?limit=${limit}`
+    )
+  },
+
+
   sendWebRTCOffer(session_id: string, sdp: string, type: string) {
     return request<{ status: string }>(`/conversations/sessions/${session_id}/offer`, {
       method: 'POST',

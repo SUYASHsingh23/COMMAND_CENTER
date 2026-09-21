@@ -13,12 +13,13 @@ from app.orchestrator.policy.engine import PolicyEngine
 from app.orchestrator.workflows.executor import WorkflowExecutor
 from app.orchestrator.summary.generator import CallSummaryGenerator, EscalationHandler
 from app.api.websocket.events import (
-    IntentDetectedEvent, SentimentUpdatedEvent, ResponseGeneratedEvent
+    IntentDetectedEvent, SentimentUpdatedEvent, ResponseGeneratedEvent, PlanGeneratedEvent
 )
 from app.observability.bus import event_bus
 from app.database.session import async_session_factory
 from app.models.conversation import Message
 from app.enterprise.crm.service import CRMService
+import uuid as _uuid_mod
 
 _crm = CRMService()
 
@@ -37,18 +38,27 @@ RESPONSE_SYSTEM = (
     "- For profile updates: confirm the change was made successfully.\n"
     "- If data is not in context and no tool result has it, say you will look it up.\n\n"
 
+    "POLICY & COVERAGE QUESTIONS:\n"
+    "- When [POLICY KNOWLEDGE] is present in context, use ONLY that content to answer questions about coverage,\n"
+    "  inclusions, exclusions, deductibles, waiting periods, claim limits, or policy terms.\n"
+    "- Quote specific details from [POLICY KNOWLEDGE] — coverage amounts, waiting periods, sub-limits, exclusions.\n"
+    "- Never fabricate coverage details that are not in [POLICY KNOWLEDGE].\n"
+    "- If [POLICY KNOWLEDGE] is not present but the customer asks about coverage, use get_policy_coverage tool.\n\n"
+
     "REFUND / CLAIM VALIDATION — FOLLOW THIS FLOW STRICTLY:\n"
     "Step 1 — Gather reason: If the customer mentions a refund or claim credit but has NOT yet stated a reason, ask them:\n"
     "  'I can help with that. Could you please tell me the reason for your refund or claim credit request?\n"
     "   For example: duplicate premium payment, overbilling, policy cancellation within free-look period, or claim settlement dispute.'\n"
-    "Step 2 — Validate claim: Once the reason is given and [TOOL RESULTS] contain invoice data:\n"
-    "  - Compare the customer's claim against the premium invoice line items and amounts.\n"
-    "  - If the claim IS supported by the data (e.g. disputed premium charge appears in line items, amount matches): proceed.\n"
-    "  - If the claim is NOT supported (no matching line item, amount does not match): inform the customer.\n"
-    "    Example: 'Looking at your premium invoice, the charge of Rs.X appears correct based on your current policy plan.\n"
-    "    Could you clarify which specific charge you believe is incorrect?'\n"
+    "Step 2 — Validate claim from DATA ONLY (not from what the customer says): Once [TOOL RESULTS] contain invoice data:\n"
+    "  - For overcharge claims: Check if the disputed line item appears in the invoice with a note indicating a billing error.\n"
+    "  - For overpayment claims: YOU MUST compute the overpayment yourself — subtract total_amount from amount_paid.\n"
+    "    EXAMPLE: If amount_paid = Rs.16,028 and total_amount = Rs.10,028, then overpayment = 16,028 − 10,028 = Rs.6,000.\n"
+    "    NEVER confirm an overpayment using the amount the customer stated — ALWAYS derive it from the invoice numbers.\n"
+    "  - If data supports the claim: proceed to Step 3.\n"
+    "  - If data does NOT support the claim: state the exact values from the invoice.\n"
+    "    Example: 'According to your invoice, total due was Rs.[total_amount] and we received Rs.[amount_paid]. Could you clarify?'\n"
     "Step 3 — Confirm before acting: Before the refund tool is called, briefly confirm with the customer:\n"
-    "  'I can see the disputed premium of Rs.X on invoice [number]. I will now raise a refund request for Rs.X. Shall I proceed?'\n"
+    "  'I can see [the disputed charge of Rs.X / an overpayment of Rs.X] on invoice [number]. I will now raise a refund request for Rs.X. Shall I proceed?'\n"
     "Step 4 — Report outcome: After [TOOL RESULTS] confirm the refund:\n"
     "  - If approved: 'Your premium refund of Rs.X has been processed successfully. Reference: [refund_number].'\n"
     "  - If queued for review: 'Your refund request has been logged. Reference: [reference_number]. A specialist will review it within 48 hours.'\n"
@@ -68,6 +78,14 @@ RESPONSE_SYSTEM = (
     "- Use Rs. for currency amounts and Indian number format."
 )
 
+
+def _is_valid_uuid(value: str) -> bool:
+    """Return True if value is a well-formed UUID (the only acceptable customer_id format)."""
+    try:
+        _uuid_mod.UUID(str(value))
+        return True
+    except (ValueError, AttributeError):
+        return False
 
 
 class AgentOrchestrator:
@@ -147,6 +165,34 @@ class AgentOrchestrator:
         plan = await self._planner.plan(context)
         logger.info("Plan: %d steps, direct_answer=%s, session=%s", len(plan.steps), plan.direct_answer, session_id)
 
+        # ── Emit + persist plan decision ────────────────────────────────────────
+        plan_steps_data = [
+            {"step": s.step, "tool": s.tool, "reason": s.reason}
+            for s in plan.steps
+        ]
+        try:
+            await event_bus.emit(session_id, PlanGeneratedEvent(
+                session_id=session_id,
+                direct_answer=plan.direct_answer,
+                turn_index=turn_index,
+                steps=plan_steps_data,
+            ))
+        except Exception as exc:
+            logger.warning("PlanGeneratedEvent emit failed: %s", exc)
+        try:
+            from app.models.summary import PlanEvent
+            async with async_session_factory() as db:
+                plan_record = PlanEvent(
+                    conversation_id=conversation_id,
+                    turn_index=turn_index,
+                    direct_answer=plan.direct_answer,
+                    steps=plan_steps_data,
+                )
+                db.add(plan_record)
+                await db.commit()
+        except Exception as exc:
+            logger.warning("PlanEvent persist failed: %s", exc)
+
         tool_results: list[dict] = []
         if not plan.direct_answer and plan.steps:
             for step in plan.steps:
@@ -172,8 +218,11 @@ class AgentOrchestrator:
 
             for step in plan.steps:
                 if real_customer_id:
-                    # Always inject the real customer_id so tools don't fall back to "c001"
-                    if not step.params.get("customer_id") or step.params.get("customer_id") == "c001":
+                    # Always inject the real UUID so tools don't use placeholders ("c001"),
+                    # account numbers ("ACC-005"), or any other non-UUID value the planner
+                    # may hallucinate. Validate the current value is a proper UUID first.
+                    existing = step.params.get("customer_id", "")
+                    if not existing or not _is_valid_uuid(existing):
                         step.params["customer_id"] = real_customer_id
 
                 if step.tool == "escalate_to_human":

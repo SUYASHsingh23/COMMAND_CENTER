@@ -21,6 +21,7 @@ class EventType(str, Enum):
     AUDIO_COMPLETED = "audio.completed"
     ESCALATION_CREATED = "escalation.created"
     CALL_SUMMARY = "call.summary"
+    PLAN_GENERATED = "plan.generated"
     ERROR = "error"
     CUSTOMER_UPDATED = "customer.updated"
     INVOICE_UPDATED = "invoice.updated"
@@ -105,6 +106,11 @@ class WorkflowStepEvent(BaseEvent):
     step_name: str
     step_status: str
     steps_completed: list[str]
+    detail: str | None = None
+    evidence: dict | None = None
+    rule: str | None = None
+    decision: str | None = None
+    step_number: int | None = None
 
 
 class ResponseGeneratedEvent(BaseEvent):
@@ -140,6 +146,13 @@ class CallSummaryEvent(BaseEvent):
     escalated: bool
     duration_sec: int
     tools_used: list[str]
+
+
+class PlanGeneratedEvent(BaseEvent):
+    event: EventType = EventType.PLAN_GENERATED
+    direct_answer: bool
+    turn_index: int | None = None
+    steps: list[dict]  # [{"step": int, "tool": str, "reason": str}]
 
 
 class CustomerUpdatedEvent(BaseEvent):

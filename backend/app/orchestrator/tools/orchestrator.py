@@ -11,6 +11,7 @@ from app.enterprise.scheduling.service import (
     check_availability as svc_check_availability,
     escalate_to_human_agent as svc_escalate,
 )
+from app.orchestrator.rag.search_engine import rag_engine
 
 from app.api.websocket.events import ToolStartedEvent, ToolCompletedEvent
 from app.observability.bus import event_bus
@@ -34,10 +35,14 @@ async def _dispatch(tool_name: str, params: dict) -> dict:
     if tool_name == "get_invoice":
         return await _billing.get_invoice(customer_id=params["customer_id"])
     if tool_name == "get_invoice_detail":
-        return await _billing.get_invoice_detail(invoice_id=params["invoice_id"])
+        # Accept either invoice_id (UUID) or invoice_number (e.g. INV-2026-SROVER-01)
+        inv_ref = params.get("invoice_id") or params.get("invoice_number")
+        return await _billing.get_invoice_detail(invoice_id=inv_ref)
     if tool_name == "issue_refund":
+        # Accept either invoice_id (UUID) or invoice_number (string like INV-2026-...)
+        inv_ref = params.get("invoice_id") or params.get("invoice_number")
         return await _billing.issue_refund(
-            invoice_id=params["invoice_id"],
+            invoice_id=inv_ref,
             amount=float(params["amount"]),
             reason=params.get("reason", "Customer dispute"),
         )
@@ -64,19 +69,69 @@ async def _dispatch(tool_name: str, params: dict) -> dict:
     if tool_name == "get_policy_coverage":
         customer_id = params.get("customer_id")
         plan = params.get("plan")
-        # Get account details which includes plan info and coverage
+        query = params.get("query", "coverage details inclusions exclusions deductibles")
+
+        # Step 1: Resolve plan name from account if not passed explicitly
+        plan_name = plan
         account_result = await _crm.get_account(customer_id=customer_id)
         if account_result.get("found"):
             account = account_result.get("account", {})
-            plan_name = plan or account.get("plan", "unknown")
+            plan_name = plan_name or account.get("plan") or account.get("plan_name") or "unknown"
+        else:
+            account = {}
+
+        # Step 2: Build a RAG search query from plan name + user question
+        # Map plan name to RAG domain filter for precision
+        plan_lower = (plan_name or "").lower()
+        if "health" in plan_lower or "shield" in plan_lower:
+            domain_filter = "health_insurance"
+        elif "motor" in plan_lower or "vehicle" in plan_lower or "car" in plan_lower or "third party" in plan_lower:
+            domain_filter = "motor_insurance"
+        elif "home" in plan_lower or "property" in plan_lower or "protector" in plan_lower:
+            domain_filter = "home_insurance"
+        else:
+            domain_filter = None  # Search across all domains
+
+        rag_query = f"{plan_name} {query}".strip()
+
+        # Step 3: Search the knowledge base
+        try:
+            search_results = await rag_engine.search(rag_query, top_k=4, domain=domain_filter)
+        except Exception as exc:
+            logger.error("RAG search failed for get_policy_coverage: %s", exc)
+            search_results = []
+
+        # Step 4: Format passages for the LLM context
+        passages = []
+        for r in search_results:
+            passages.append({
+                "title": r.section_title,
+                "domain": r.domain,
+                "content": r.content,
+                "score": round(r.score, 3),
+                "source": r.source,
+            })
+
+        if passages:
+            return {
+                "found": True,
+                "customer_id": customer_id,
+                "plan": plan_name,
+                "passages": passages,
+                "passage_count": len(passages),
+                "message": f"Policy coverage details retrieved for {plan_name} from knowledge base.",
+            }
+
+        # Fallback: return account data if RAG returns nothing
+        if account_result.get("found"):
             return {
                 "found": True,
                 "customer_id": customer_id,
                 "plan": plan_name,
                 "coverage_summary": account,
-                "message": f"Coverage details retrieved for plan: {plan_name}",
+                "message": f"Coverage summary for plan: {plan_name} (knowledge base returned no results).",
             }
-        return {"found": False, "error": "Customer account not found"}
+        return {"found": False, "error": "Customer account not found and knowledge base returned no results"}
     if tool_name == "create_ticket":
         return await _ticketing.create_ticket(
             customer_id=params["customer_id"],
@@ -139,65 +194,107 @@ async def _dispatch(tool_name: str, params: dict) -> dict:
 def _make_summary(tool_name: str, output: dict) -> str:
     if tool_name == "get_customer":
         c = output.get("customer", {})
-        return f"Customer: {c.get('name', 'Unknown')}, Plan: {c.get('plan', 'N/A')}" if output.get("found") else "Customer not found"
+        if output.get("found"):
+            name = c.get("name", "Unknown")
+            plan = c.get("plan", "Standard")
+            city = c.get("city", "")
+            loc = f" · {city}" if city else ""
+            return f"Policyholder: {name} (Plan: {plan}{loc})"
+        return "Customer record not found"
+
     if tool_name == "get_account":
         a = output.get("account", {})
-        return f"Account status: {a.get('status', 'N/A')}, Balance: {a.get('balance', 0)}" if output.get("found") else "Account not found"
+        if output.get("found"):
+            st = a.get("status", "Active")
+            bal = float(a.get("balance", 0))
+            plan = a.get("plan_name", a.get("plan", "Standard"))
+            return f"Account verified: Plan {plan} · Status: {st} · Balance: Rs.{bal:,.2f}"
+        return "Account record not found"
+
     if tool_name == "get_invoice":
-        return f"{output.get('count', 0)} invoice(s) found" if output.get("found") else "No invoices found"
+        invoices = output.get("invoices", [])
+        if invoices:
+            inv_summaries = [
+                f"{i.get('invoice_number', i.get('invoice_id', ''))[:16]} (Rs.{float(i.get('total_amount', 0)):,.2f} · {i.get('status', '').upper()})"
+                for i in invoices[:2]
+            ]
+            return f"Found {len(invoices)} invoice(s): {', '.join(inv_summaries)}" + ("…" if len(invoices) > 2 else "")
+        return "No invoices found for account"
+
     if tool_name == "get_invoice_detail":
         inv = output.get("invoice", {})
-        return f"Invoice {inv.get('invoice_id', '')}: {inv.get('amount', 0)} ({inv.get('status', 'N/A')})" if output.get("found") else "Invoice not found"
+        if output.get("found") and inv:
+            num = inv.get("invoice_number", inv.get("invoice_id", ""))
+            tot = float(inv.get("total_amount", 0))
+            paid = float(inv.get("amount_paid", 0))
+            st = inv.get("status", "sent").upper()
+            return f"Verified Invoice {num}: Total Rs.{tot:,.2f} · Paid Rs.{paid:,.2f} · Status: {st}"
+        return output.get("error", "Invoice not found")
+
     if tool_name == "issue_refund":
         if output.get("success"):
             r = output.get("refund", {})
-            return f"Refund {r.get('refund_number', r.get('refund_id', ''))} approved for Rs.{r.get('amount', 0)}"
-        # Blocked — provide clean summary with reference ID if available
+            ref = r.get("refund_number", r.get("refund_id", ""))
+            amt = float(r.get("amount", 0))
+            return f"Refund {ref} approved for Rs.{amt:,.2f}. Credit processed."
         ref = output.get("refund_number", "")
         queued = output.get("queued_for_review", False)
-        is_investigation = ref and ref.startswith("CASE-")
-        if queued and is_investigation:
-            return (
-                f"This refund request has been flagged for specialist investigation. "
-                f"Case reference number: {ref}. "
-                f"Inform the customer of their case reference number and that a specialist will contact them shortly."
-            )
-        elif queued:
-            return (
-                f"This refund request requires specialist review and has been queued. "
-                f"Reference number: {ref}. "
-                f"Inform the customer their request is under review with reference {ref}."
-            )
-        # Hard block (balance check, invoice mismatch, etc.) — do not expose reason
-        return "Refund request could not be processed at this time. Please ask the customer to contact support."
+        if queued and ref and ref.startswith("CASE-"):
+            return f"Dispute flagged for fraud review (Case: {ref}). Routed to specialist queue."
+        elif queued and ref:
+            return f"Dispute exceeds approval threshold (Ref: {ref}). Queued for supervisor authorization."
+        return output.get("error", "Refund request could not be processed automatically.")
+
     if tool_name == "pay_outstanding_balance":
         if output.get("success"):
-            return output.get("summary", "Payment successful")
+            return output.get("summary", "Payment settled successfully")
         return f"Payment failed: {output.get('error', 'Unknown error')}"
+
     if tool_name == "get_claim_status":
         if output.get("found"):
-            return f"Claim {output.get('reference', '')}: {output.get('status', 'unknown')}"
+            ref = output.get("reference", "")
+            st = str(output.get("status", "unknown")).upper()
+            return f"Claim Status {ref}: {st}"
         return output.get("message", "Claim not found")
+
     if tool_name == "get_policy_coverage":
         if output.get("found"):
-            return f"Coverage retrieved for plan: {output.get('plan', 'N/A')}"
-        return output.get("error", "Coverage lookup failed")
+            plan = output.get("plan", "Policy")
+            passages = output.get("passages", [])
+            if passages:
+                titles = [p.get("title", "") for p in passages if p.get("title")][:2]
+                titles_str = f" ({', '.join(titles)})" if titles else ""
+                return f"Policy terms retrieved for {plan}: {len(passages)} clause(s) verified{titles_str}"
+            return f"Coverage summary retrieved for plan: {plan}"
+        return output.get("error", "Policy coverage lookup failed")
+
     if tool_name == "create_ticket":
-        return f"Ticket {output.get('ticket_id', '')} created" if output.get("success") else "Ticket creation failed"
+        tid = output.get("ticket_id", "")
+        return f"Ticket {tid} created successfully" if output.get("success") else "Ticket creation failed"
+
     if tool_name == "schedule_engineer":
-        return output.get("confirmation", "Engineer scheduled") if output.get("success") else "Scheduling failed"
+        if output.get("success"):
+            num = output.get("appointment_number", output.get("slot_id", ""))
+            date = output.get("date", "")
+            time = output.get("time", "")
+            return f"Surveyor visit confirmed ({num}) for {date} at {time}."
+        return output.get("confirmation", output.get("error", "Scheduling failed"))
+
     if tool_name == "get_payment_history":
         if output.get("found"):
-            return output.get("summary", "Payment history retrieved")
+            return output.get("summary", "Payment history records retrieved")
         return "No payment history found"
+
     if tool_name == "escalate_to_human":
         if output.get("success"):
             ref = output.get("appointment_number", "")
-            return f"Human agent escalation created. Reference: {ref}"
+            return f"Escalation ticket {ref} created. Assigned to specialist queue."
         return output.get("error", "Escalation failed")
+
     if tool_name == "update_customer_details":
-        return output.get("message", "Customer details updated") if output.get("success") else output.get("error", "Update failed")
-    return str(output)[:100]
+        return output.get("message", "Customer profile updated") if output.get("success") else output.get("error", "Update failed")
+
+    return str(output)[:120]
 
 
 

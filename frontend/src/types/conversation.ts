@@ -64,3 +64,27 @@ export interface Intent {
   urgency: 'low' | 'medium' | 'high'
   confidence: number | null
 }
+
+export interface HistoryMessageItem {
+  message_id: string
+  role: 'customer' | 'agent'
+  content: string
+  turn_index: number | null
+  timestamp: string
+  sentiment?: string | null
+}
+
+export interface CustomerConversationHistoryItem {
+  conversation_id: string
+  session_id: string
+  started_at: string
+  ended_at: string | null
+  duration_sec: number | null
+  status: string
+  sentiment: string
+  resolution: string | null
+  summary: string | null
+  intents: string[]
+  messages: HistoryMessageItem[]
+}
+

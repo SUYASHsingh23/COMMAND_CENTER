@@ -35,7 +35,7 @@ class TokenResponse(BaseModel):
 
 
 class CustomerProfile(BaseModel):
-    """Minimal profile returned on /auth/me — enough for the UI and agent pre-loading."""
+    """Enriched profile returned on /auth/me — provides policy details, account status, and standing."""
     customer_id: UUID4
     name: str
     email: Optional[str]
@@ -47,6 +47,9 @@ class CustomerProfile(BaseModel):
     is_active: bool
     last_login_at: Optional[datetime]
     created_at: datetime
+    account_status: Optional[str] = "active"
+    balance: Optional[float] = 0.0
+    insurance_type: Optional[str] = "health"
 
     class Config:
         from_attributes = True

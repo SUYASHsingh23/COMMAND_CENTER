@@ -68,10 +68,23 @@ export function useWebRTC({ onAgentAudioStateChange }: UseWebRTCOptions): UseWeb
         if (ev.data instanceof ArrayBuffer && ev.data.byteLength > 0) {
           console.log('[AudioWS] Received agent TTS audio:', ev.data.byteLength, 'bytes')
           await playTTS(ev.data)
+        } else if (typeof ev.data === 'string') {
+          try {
+            const data = JSON.parse(ev.data)
+            if (data.type === 'session_ended' || data.event === 'session.ended') {
+              console.log('[AudioWS] Remote session termination signal received')
+              window.dispatchEvent(new CustomEvent('insureai:session-ended', { detail: data }))
+            }
+          } catch {}
         }
       }
       ws.onerror = (e) => console.error('[AudioWS] Error:', e)
-      ws.onclose = (e) => console.log('[AudioWS] Closed:', e.code, e.reason)
+      ws.onclose = (e) => {
+        console.log('[AudioWS] Closed:', e.code, e.reason)
+        if (e.code === 1000 && e.reason === 'Session ended') {
+          window.dispatchEvent(new CustomEvent('insureai:session-ended'))
+        }
+      }
 
       await waitForOpen(ws)
       console.log('[AudioWS] WebSocket OPEN')

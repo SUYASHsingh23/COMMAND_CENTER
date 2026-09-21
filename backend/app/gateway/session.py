@@ -109,6 +109,7 @@ class SessionManager:
             duration_sec=duration_sec,
         )
         await manager.broadcast(session_id, event.model_dump())
+        await manager.close_session_connections(session_id)
 
         logger.info("Session ended: %s (duration: %ss)", session_id, duration_sec)
         return conversation

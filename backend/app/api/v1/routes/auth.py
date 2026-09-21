@@ -193,10 +193,42 @@ async def logout(payload: RefreshRequest, db: DB):
 
 
 @router.get("/me", response_model=CustomerProfile)
-async def get_me(current_customer: Customer = Depends(get_current_customer)):
+async def get_me(
+    db: DB,
+    current_customer: Customer = Depends(get_current_customer),
+):
     """
-    Return the authenticated customer's profile.
-    Used by the frontend on startup to pre-load customer context
-    for the Command Center voice agent.
+    Return the authenticated customer's profile enriched with account status,
+    balance, and detected insurance type from the database.
     """
-    return current_customer
+    account = (await db.execute(
+        select(Account).where(Account.customer_id == current_customer.customer_id)
+    )).scalars().first()
+
+    account_status = account.status if account and account.status else "active"
+    balance = float(account.balance) if account and account.balance is not None else 0.0
+
+    plan_str = (current_customer.plan or (account.plan_name if account else "") or "").lower()
+    if "motor" in plan_str or "auto" in plan_str or "car" in plan_str:
+        insurance_type = "motor"
+    elif "home" in plan_str or "property" in plan_str:
+        insurance_type = "home"
+    else:
+        insurance_type = "health"
+
+    return CustomerProfile(
+        customer_id=current_customer.customer_id,
+        name=current_customer.name,
+        email=current_customer.email,
+        phone=current_customer.phone,
+        account_number=current_customer.account_number,
+        plan=current_customer.plan or (account.plan_name if account else None),
+        customer_tier=current_customer.customer_tier,
+        preferred_language=current_customer.preferred_language,
+        is_active=current_customer.is_active,
+        last_login_at=current_customer.last_login_at,
+        created_at=current_customer.created_at,
+        account_status=account_status,
+        balance=balance,
+        insurance_type=insurance_type,
+    )

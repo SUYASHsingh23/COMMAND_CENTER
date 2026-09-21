@@ -230,3 +230,10 @@ input::placeholder, textarea::placeholder {
 .animate-slide-up {
   animation: slide-up var(--transition-slow) forwards;
 }
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}

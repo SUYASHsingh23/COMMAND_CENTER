@@ -150,8 +150,28 @@ class ContextAssembler:
         if context.tool_results:
             lines.append("[TOOL RESULTS]:")
             for r in context.tool_results:
-                lines.append(f"  - {r.get('tool')}: {r.get('summary', str(r.get('output', ''))[:120])}")
-
+                output = r.get("output", {})
+                # For get_policy_coverage: inject full knowledge-base passages so the LLM
+                # can read actual policy text rather than just the one-line summary.
+                if r.get("tool") == "get_policy_coverage" and output.get("found") and output.get("passages"):
+                    lines.append(f"  - get_policy_coverage: Found {output.get('passage_count', 0)} passage(s) for plan \"{output.get('plan', 'N/A')}\"")
+                    lines.append("[POLICY KNOWLEDGE]:")
+                    for p in output["passages"]:
+                        lines.append(f"  [{p.get('domain', 'general').upper()}] {p.get('title', '')}:")
+                        lines.append(f"  {p.get('content', '')}")
+                else:
+                    if "summary" in r:
+                        lines.append(f"  - {r.get('tool')}: {r['summary']}")
+                    else:
+                        import json
+                        try:
+                            # Dump JSON to string, limit to 2000 chars to avoid blowing up context
+                            output_str = json.dumps(output)
+                            if len(output_str) > 2000:
+                                output_str = output_str[:2000] + "... [TRUNCATED]"
+                        except Exception:
+                            output_str = str(output)[:2000]
+                        lines.append(f"  - {r.get('tool')}: {output_str}")
         if context.workflow_result:
             wf = context.workflow_result
             lines.append(f"[WORKFLOW]: {wf.get('workflow', '')} → {wf.get('message', wf.get('status', ''))}")

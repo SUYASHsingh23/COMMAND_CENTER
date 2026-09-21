@@ -553,8 +553,15 @@ async def list_all_refunds(
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    """Supervisor: view all refund requests."""
-    stmt = select(RefundRequest)
+    """Supervisor: view all refund requests with customer profile details."""
+    stmt = (
+        select(
+            RefundRequest,
+            Customer.name.label("customer_name"),
+            Customer.email.label("customer_email"),
+        )
+        .outerjoin(Customer, Customer.customer_id == RefundRequest.customer_id)
+    )
     if status:
         stmt = stmt.where(RefundRequest.status == status)
     if threshold_only:
@@ -562,8 +569,13 @@ async def list_all_refunds(
     if investigation_only:
         stmt = stmt.where(RefundRequest.status == "investigation")
     stmt = stmt.order_by(RefundRequest.created_at.desc()).limit(limit)
-    rows = (await db.execute(stmt)).scalars().all()
-    return [RefundOut.model_validate(r) for r in rows]
+    rows = (await db.execute(stmt)).all()
+    results = []
+    for row in rows:
+        setattr(row.RefundRequest, "customer_name", row.customer_name)
+        setattr(row.RefundRequest, "customer_email", row.customer_email)
+        results.append(RefundOut.model_validate(row.RefundRequest))
+    return results
 
 
 @router.get("/customers/{customer_id}/refunds", response_model=list[RefundOut])

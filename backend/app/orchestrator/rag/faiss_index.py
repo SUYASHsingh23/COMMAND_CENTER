@@ -52,7 +52,6 @@ class FAISSIndex:
         n_docs, dim = embeddings.shape
 
         # L2-normalize for cosine similarity via inner product
-        embeddings = embeddings.copy()
         faiss.normalize_L2(embeddings)
 
         # IndexFlatIP — exact inner product search (best for <10K docs)
@@ -78,7 +77,7 @@ class FAISSIndex:
         Search FAISS index for nearest neighbors.
 
         Args:
-            query_embedding: numpy array of shape (1, dim) or (dim,) — float32
+            query_embedding: numpy array of shape (1, dim) — float32
             top_k: number of results to return
 
         Returns:
@@ -91,7 +90,7 @@ class FAISSIndex:
             return []
 
         # L2-normalize query for cosine similarity
-        query = query_embedding.copy().astype(np.float32)
+        query = query_embedding.copy()
         faiss.normalize_L2(query)
 
         # Ensure 2D shape
@@ -109,7 +108,7 @@ class FAISSIndex:
             idx = int(indices[0][i])
             score = float(scores[0][i])
             if idx >= 0 and idx in self._id_map:
-                # Inner product scores are in [-1, 1] for normalized vectors
+                # Inner product scores are already in [-1, 1] for normalized vectors
                 # Clamp to [0, 1] for consistency
                 results.append((self._id_map[idx], max(0.0, score)))
 

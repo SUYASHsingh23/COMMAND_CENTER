@@ -194,7 +194,9 @@ class RefundOut(BaseModel):
     created_at: datetime
     reviewed_at: Optional[datetime]
     processed_at: Optional[datetime]
-    custom_fields: dict[str, Any]
+    custom_fields: dict[str, Any] = {}
+    customer_name: Optional[str] = None
+    customer_email: Optional[str] = None
 
     class Config:
         from_attributes = True

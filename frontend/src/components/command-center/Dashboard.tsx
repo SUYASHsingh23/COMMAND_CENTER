@@ -183,13 +183,11 @@ export function CommandCenter() {
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 {active.status === 'active' && (
                   <button
+                    id="supervisor-force-end-btn"
                     onClick={async () => {
-                      if (!confirm("Are you sure you want to end this active session?")) return;
                       try {
                         const r = await fetch(`${getApiBase()}/analytics/sessions/${active.session_id}/force-end`, { method: 'POST' });
                         if (r.ok) {
-                          alert("Session ended by admin.");
-                          // It will update via websocket/polling, but we can optimistically set status
                           useSupervisorStore.getState().setSessionStatus(active.session_id, 'completed');
                         }
                       } catch (e) { console.error(e); }
@@ -203,6 +201,7 @@ export function CommandCenter() {
                       border: '1px solid rgba(248,113,113,0.3)',
                       borderRadius: 6,
                       cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     ⏹ End Session

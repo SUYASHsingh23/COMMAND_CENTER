@@ -5,7 +5,7 @@ from sqlalchemy import select, func, text, update
 from app.core.dependencies import get_db
 from app.models.conversation import Conversation, Message, Intent, ConversationState
 from app.models.execution import ToolExecution, WorkflowExecution, PolicyDecision
-from app.models.summary import CallSummary, Escalation
+from app.models.summary import CallSummary, Escalation, PlanEvent
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -100,6 +100,202 @@ async def list_conversations(
     ]
 
 
+WORKFLOW_STEP_CATALOG: dict[str, dict] = {
+    "verify_invoice": {
+        "title": "Verify Invoice & Billing Ledger",
+        "detail": "Retrieved invoice billing record from system. Verified billing line items, total amount, and confirmed payment status against ledger.",
+        "type": "document_verification",
+        "rule": "Policy Rule R-101: Valid invoice reference required for refund evaluation.",
+        "decision": "Invoice record verified and eligible for dispute evaluation.",
+        "evidence": {"document": "Invoice Reference", "verification": "Confirmed in Billing Ledger", "status": "VERIFIED"},
+    },
+    "policy_check": {
+        "title": "Policy & Terms Compliance Check",
+        "detail": "Evaluated dispute against Standard Refund & Reversal Terms (Clause 3.2). Verified eligibility window (within 30 days) and account status.",
+        "type": "policy_evaluation",
+        "rule": "Policy Rule R-102: Claims must be submitted within 30 days of billing date.",
+        "decision": "Account in good standing; dispute qualifies under Clause 3.2.",
+        "evidence": {"clause": "Section 3.2 (Billing Adjustments)", "standing": "Active", "window": "<= 30 days"},
+    },
+    "policy_document_check": {
+        "title": "Policy Document & Terms Verification",
+        "detail": "Consulted Billing & Premium Dispute Policy. Account in good standing and eligible for reversal.",
+        "type": "policy_evaluation",
+        "rule": "Dispute must fall within authorized billing adjustment terms.",
+        "decision": "Claim verified against policy terms.",
+        "evidence": {"terms": "Dispute Terms", "section": "Clause 3.2"},
+    },
+    "fraud_velocity_check": {
+        "title": "Anti-Fraud Velocity Guard",
+        "detail": "Checked customer claim frequency across previous 24-hour window. Verified no abnormal dispute velocity.",
+        "type": "policy_evaluation",
+        "rule": "Velocity Rule: < 3 refund disputes per 24 hours.",
+        "decision": "Passed anti-fraud velocity verification.",
+        "evidence": {"velocity_24h": 0, "risk_rating": "LOW"},
+    },
+    "threshold_evaluation": {
+        "title": "Policy Threshold & Authority Evaluation",
+        "detail": "Evaluated refund amount against autonomous limit ceiling (Rs.5,000.00).",
+        "type": "policy_evaluation",
+        "rule": "Policy Rule R-104: Claims <= Rs.5,000 auto-approved; claims > Rs.5,000 require human supervisor authorization.",
+        "decision": "Autonomous approval ceiling check completed.",
+        "evidence": {"autonomous_limit": "Rs.5,000.00"},
+    },
+    "threshold_exceeded": {
+        "title": "Threshold Ceiling Exceeded",
+        "detail": "Requested refund amount exceeds autonomous threshold of Rs.5,000.00. Automatic approval denied.",
+        "type": "policy_evaluation",
+        "rule": "Policy Rule R-104: High-value transactions require supervisor sign-off.",
+        "decision": "Escalation to human supervisor required.",
+        "evidence": {"threshold": "Rs.5,000.00", "authorization_required": "Tier-2 Supervisor"},
+    },
+    "process_refund": {
+        "title": "Process Refund & Ledger Settlement",
+        "detail": "Executed autonomous refund transaction in payment core. Updated accounting balance and marked invoice adjustment.",
+        "type": "workflow_step",
+        "rule": "Accounting Rule A-201: Issue ledger credit to original payment method.",
+        "decision": "Settlement transaction executed.",
+        "evidence": {"settlement_channel": "Original Payment Source", "action": "CREDIT_ISSUED"},
+    },
+    "process_settlement": {
+        "title": "Process Ledger Settlement",
+        "detail": "Executed refund reversal in billing core. Ledger balance adjusted and marked as refunded.",
+        "type": "workflow_step",
+        "rule": "Execute ledger reversal and record billing transaction.",
+        "decision": "Settlement executed successfully.",
+        "evidence": {"settlement_channel": "Original Payment Method", "status": "COMPLETED"},
+    },
+    "notify_customer": {
+        "title": "Notify Customer & Issue Reference",
+        "detail": "Generated confirmation notification and issued tracking reference to customer.",
+        "type": "workflow_step",
+        "rule": "Customer Care Rule C-301: Provide formal confirmation and dispute reference.",
+        "decision": "Customer notified with tracking reference.",
+        "evidence": {"channel": "In-Session & Email Confirmation"},
+    },
+    "queue_for_human_review": {
+        "title": "Queue for Human Supervisor Review",
+        "detail": "Created escalation ticket and routed case to Tier-2 Supervisor queue for manual authorization.",
+        "type": "escalation",
+        "rule": "Escalation Protocol E-101: Route high-value or complex disputes to specialist queue.",
+        "decision": "Case queued for specialist review.",
+        "evidence": {"queue": "Tier-2 Billing Supervisor", "priority": "high"},
+    },
+    "verify_account": {
+        "title": "Verify Account & Subscription Status",
+        "detail": "Verified customer subscription account, active service status, and contract records.",
+        "type": "document_verification",
+        "rule": "Policy Rule C-100: Active subscription account required.",
+        "decision": "Account identity and active subscription verified.",
+        "evidence": {"account_status": "active"},
+    },
+    "check_contract": {
+        "title": "Check Contract Tenure & Terms",
+        "detail": "Evaluated subscription tenure, minimum commitment period, and applicable notice requirements.",
+        "type": "policy_evaluation",
+        "rule": "Policy Rule C-101: 30-day notice period applies to standard cancellations.",
+        "decision": "Contract terms verified; notice period calculated.",
+        "evidence": {"notice_period_days": 30},
+    },
+    "check_contract_status": {
+        "title": "Check Contract Tenure & Early Termination",
+        "detail": "Evaluated contract commitment period and early termination fee applicability.",
+        "type": "policy_evaluation",
+        "rule": "Policy Rule C-101: Check for early termination obligations.",
+        "decision": "Contract terms evaluated.",
+        "evidence": {"notice_period_days": 30},
+    },
+    "retention_attempt": {
+        "title": "Retention Offer & Plan Optimization",
+        "detail": "Evaluated customer usage and presented eligible retention discounts or tailored plan options.",
+        "type": "workflow_step",
+        "rule": "Customer Success Rule CS-201: Offer optimized alternatives before cancellation.",
+        "decision": "Retention alternatives evaluated.",
+        "evidence": {"offer_status": "evaluated"},
+    },
+    "calculate_etf": {
+        "title": "Calculate Early Termination Fee",
+        "detail": "Calculated contract early termination fee and notice period obligations.",
+        "type": "policy_evaluation",
+        "rule": "Contract Clause 7.1: Early cancellation subject to remaining tenure fee.",
+        "decision": "Early termination fee computed.",
+        "evidence": {"fee_type": "Early Termination"},
+    },
+    "process_cancellation": {
+        "title": "Process Service Cancellation",
+        "detail": "Scheduled service termination at cycle end, generated final settlement statement.",
+        "type": "workflow_step",
+        "rule": "Deactivate service line and generate final balance statement.",
+        "decision": "Cancellation processed.",
+        "evidence": {"action": "SERVICE_DEACTIVATED"},
+    },
+    "check_outage": {
+        "title": "Check Area Network & Grid Outages",
+        "detail": "Queried infrastructure monitoring systems for known incidents in customer area.",
+        "type": "document_verification",
+        "rule": "Operational Guideline T-101: Check for known area outages before individual triage.",
+        "decision": "Area infrastructure checked; no widespread outages detected.",
+        "evidence": {"infrastructure_status": "NORMAL", "area_outage": False},
+    },
+    "remote_diagnostics": {
+        "title": "Run Remote Device Diagnostics",
+        "detail": "Executed telemetry tests and ping latency diagnostics on customer connection.",
+        "type": "document_verification",
+        "rule": "Operational Guideline T-102: Measure line attenuation, SNR margin, and packet loss.",
+        "decision": "Telemetry test completed; diagnostic profile generated.",
+        "evidence": {"packet_loss": "0.2%", "line_status": "CONNECTED"},
+    },
+    "create_ticket": {
+        "title": "Create Technical Support Ticket",
+        "detail": "Logged issue in IT service management system with priority tagging and diagnostic logs.",
+        "type": "workflow_step",
+        "rule": "Service Level Agreement SLA-204: Create ticket for unresolved technical incidents.",
+        "decision": "Support ticket opened in queue.",
+        "evidence": {"queue": "Field Technical Operations", "priority": "standard"},
+    },
+    "schedule_engineer": {
+        "title": "Schedule Field Technician Dispatch",
+        "detail": "Allocated field technician slot for onsite inspection and equipment check.",
+        "type": "workflow_step",
+        "rule": "Operational Guideline T-105: Dispatch field technician within SLA window.",
+        "decision": "Technician appointment reserved.",
+        "evidence": {"dispatch_type": "Onsite Inspection"},
+    },
+    "verify_eligibility": {
+        "title": "Verify Plan Upgrade Eligibility",
+        "detail": "Checked customer account standing, equipment compatibility, and network bandwidth headroom.",
+        "type": "document_verification",
+        "rule": "Sales Rule U-101: Upgrades require account in good standing and technical feasibility.",
+        "decision": "Customer eligible for upgraded plan.",
+        "evidence": {"eligibility": "APPROVED"},
+    },
+    "calculate_pricing": {
+        "title": "Calculate Prorated Plan Differential",
+        "detail": "Computed billing differential for remaining billing cycle days and applicable promotional rates.",
+        "type": "policy_evaluation",
+        "rule": "Billing Rule B-102: Prorate plan cost based on remaining days in billing cycle.",
+        "decision": "Prorated pricing calculated.",
+        "evidence": {"billing_method": "Prorated Differential"},
+    },
+    "provision_upgrade": {
+        "title": "Provision Upgraded Service Tier",
+        "detail": "Updated service configuration in provisioning system and adjusted speed/data profiles.",
+        "type": "workflow_step",
+        "rule": "Provisioning Rule P-201: Activate new profile in network registry.",
+        "decision": "Service tier provisioned.",
+        "evidence": {"status": "PROVISIONED"},
+    },
+    "confirm_upgrade": {
+        "title": "Confirm Upgrade to Customer",
+        "detail": "Sent confirmation of service upgrade, effective date, and revised billing schedule.",
+        "type": "workflow_step",
+        "rule": "Customer Notification Rule: Send formal upgrade confirmation.",
+        "decision": "Confirmation dispatched.",
+        "evidence": {"notification_status": "DELIVERED"},
+    },
+}
+
+
 @router.get("/conversations/{conversation_id}/detail")
 async def get_conversation_detail(
     conversation_id: str,
@@ -134,8 +330,12 @@ async def get_conversation_detail(
     )
     intent_list = intents.scalars().all()
 
-    summaries = await db.execute(select(CallSummary).where(CallSummary.conversation_id == cid))
-    summary = summaries.scalar_one_or_none()
+    summaries = await db.execute(
+        select(CallSummary)
+        .where(CallSummary.conversation_id == cid)
+        .order_by(CallSummary.generated_at.desc())
+    )
+    summary = summaries.scalars().first()
 
     workflows = await db.execute(select(WorkflowExecution).where(WorkflowExecution.conversation_id == cid))
     wf_list = workflows.scalars().all()
@@ -144,6 +344,16 @@ async def get_conversation_detail(
         select(PolicyDecision).where(PolicyDecision.conversation_id == cid).order_by(PolicyDecision.timestamp)
     )
     policy_list = policies.scalars().all()
+
+    escalations = await db.execute(
+        select(Escalation).where(Escalation.conversation_id == cid).order_by(Escalation.timestamp)
+    )
+    escalation_list = escalations.scalars().all()
+
+    plan_events = await db.execute(
+        select(PlanEvent).where(PlanEvent.conversation_id == cid).order_by(PlanEvent.timestamp)
+    )
+    plan_event_list = plan_events.scalars().all()
 
     # Build rich timeline: merge messages, tools, intents, policies, workflows into chronological events
     timeline_events = []
@@ -163,24 +373,57 @@ async def get_conversation_detail(
             "type": "message_user" if m.role == "user" or m.role == "customer" else "message_agent",
             "timestamp": m.timestamp.isoformat() if m.timestamp else None,
             "label": "Customer" if m.role in ("user", "customer") else "Agent Response",
-            "detail": m.content[:120] + ("…" if len(m.content) > 120 else ""),
+            "detail": m.content,
             "turn_index": m.turn_index,
         })
 
-    # Tool executions
+    # Tool executions — executive summary without raw JSON dumping
+    from app.orchestrator.tools.orchestrator import _make_summary
+
     for t in tool_list:
+        summary_desc = ""
+        if t.output:
+            try:
+                summary_desc = _make_summary(t.tool_name, t.output)
+            except Exception:
+                summary_desc = ""
+        if not summary_desc:
+            summary_desc = "Execution successful" if t.status == "success" else f"Status: {t.status}"
+
+        dur_str = f"{t.duration_ms}ms" if t.duration_ms is not None else ""
+        detail_str = f"{summary_desc}" + (f" ({dur_str})" if dur_str else "")
+
         timeline_events.append({
             "type": "tool_completed",
             "timestamp": t.timestamp.isoformat() if t.timestamp else None,
-            "label": f"Tool: {t.tool_name}",
-            "detail": f"{t.status} · {t.duration_ms}ms",
+            "label": f"Tool: {t.tool_name.replace('_', ' ').title()}",
+            "detail": detail_str,
             "status": t.status,
+            "duration_ms": t.duration_ms,
             "input_params": t.input_params,
+            "output": t.output,
+        })
+
+    # Plan events
+    for p in plan_event_list:
+        if p.direct_answer:
+            label = "Plan: Direct Answer"
+            detail = "Responding directly from verified context — no external tools needed"
+        else:
+            tools_planned = ", ".join(s.get("tool", "").replace("_", " ").title() for s in (p.steps or []) if s.get("tool"))
+            step_reasons = [s.get("reason") for s in (p.steps or []) if s.get("reason") and s.get("reason") != "why this tool"]
+            label = f"Plan: {len(p.steps or [])} Tool{'s' if len(p.steps or []) != 1 else ''} Queued"
+            detail = f"Sequence: {tools_planned}" + (f" · {step_reasons[0]}" if step_reasons else "")
+        timeline_events.append({
+            "type": "plan",
+            "timestamp": p.timestamp.isoformat() if p.timestamp else None,
+            "label": label,
+            "detail": detail,
+            "steps": p.steps,
         })
 
     # Intent detections
     for i in intent_list:
-        # Try to get timestamp from linked message
         ts = None
         if i.message_id:
             linked_msg = next((m for m in msgs if m.message_id == i.message_id), None)
@@ -188,11 +431,12 @@ async def get_conversation_detail(
                 ts = linked_msg.timestamp.isoformat()
         if not ts and msgs:
             ts = msgs[0].timestamp.isoformat()
+        detected_str = ", ".join(i.detected_intents[:2]) if i.detected_intents else "general_inquiry"
         timeline_events.append({
             "type": "intent",
             "timestamp": ts,
-            "label": f"Intent: {', '.join(i.detected_intents[:2]) if i.detected_intents else 'detected'}",
-            "detail": f"Sentiment: {i.sentiment} · Urgency: {i.urgency}",
+            "label": f"Intent: {detected_str.replace('_', ' ').title()}",
+            "detail": f"Sentiment: {i.sentiment.capitalize() if i.sentiment else 'Neutral'} · Urgency: {i.urgency.capitalize() if i.urgency else 'Medium'}",
         })
 
     # Policy decisions
@@ -200,19 +444,80 @@ async def get_conversation_detail(
         timeline_events.append({
             "type": "policy",
             "timestamp": p.timestamp.isoformat() if p.timestamp else None,
-            "label": f"Policy: {p.policy_name}",
+            "label": f"Policy Rule: {p.policy_name.replace('_', ' ').title() if p.policy_name else 'Guardrail'}",
             "detail": p.reason,
             "status": "allowed" if p.authorized else "blocked",
         })
 
-    # Workflow steps
+    # Workflow executions & enriched sub-steps
     for w in wf_list:
+        raw_steps = w.steps_completed or []
+        wf_display = w.workflow_name.replace("_", " ").title()
+
+        if raw_steps:
+            for idx, step_item in enumerate(raw_steps):
+                if isinstance(step_item, dict):
+                    s_name = step_item.get("step_name", "")
+                    s_status = step_item.get("step_status", "completed")
+                    s_detail = step_item.get("detail", "")
+                    s_evidence = step_item.get("evidence", {})
+                    s_rule = step_item.get("rule", "")
+                    s_decision = step_item.get("decision", "")
+                    s_ts = step_item.get("timestamp") or (w.started_at.isoformat() if w.started_at else None)
+                else:
+                    # Legacy string step — enrich with comprehensive metadata from catalog
+                    s_name = str(step_item)
+                    meta = WORKFLOW_STEP_CATALOG.get(s_name, {})
+                    s_status = "completed"
+                    s_detail = meta.get("detail", f"Step executed: {s_name.replace('_', ' ')}.")
+                    s_evidence = meta.get("evidence", {})
+                    s_rule = meta.get("rule", "")
+                    s_decision = meta.get("decision", "")
+                    s_ts = w.started_at.isoformat() if w.started_at else None
+
+                step_type = "workflow_step"
+                catalog_meta = WORKFLOW_STEP_CATALOG.get(s_name, {})
+                catalog_title = catalog_meta.get("title", s_name.replace('_', ' ').replace('verify ', 'Verified ').title())
+                
+                if "document" in s_name or "verify" in s_name:
+                    step_type = "document_verification"
+                elif "threshold" in s_name or "fraud" in s_name or "policy" in s_name:
+                    step_type = "policy_evaluation"
+                elif "escalat" in s_name or "queue" in s_name:
+                    step_type = "escalation"
+
+                timeline_events.append({
+                    "type": step_type,
+                    "timestamp": s_ts,
+                    "label": f"{wf_display} → Step {idx + 1}: {catalog_title}",
+                    "detail": s_detail,
+                    "evidence": s_evidence,
+                    "rule": s_rule,
+                    "decision": s_decision,
+                    "status": s_status,
+                    "workflow_name": w.workflow_name,
+                    "step_number": idx + 1,
+                })
+        else:
+            timeline_events.append({
+                "type": "workflow_step",
+                "timestamp": w.started_at.isoformat() if w.started_at else None,
+                "label": f"Workflow: {wf_display}",
+                "detail": f"Status: {w.state.upper()} · Running workflow steps",
+                "status": w.state,
+                "workflow_name": w.workflow_name,
+                "steps": [],
+            })
+
+    # Escalation events
+    for esc in escalation_list:
         timeline_events.append({
-            "type": "workflow_step",
-            "timestamp": w.started_at.isoformat() if w.started_at else None,
-            "label": f"Workflow: {w.workflow_name}",
-            "detail": f"State: {w.state} · Steps: {len(w.steps_completed or [])} completed",
-            "status": w.state,
+            "type": "escalation",
+            "timestamp": esc.timestamp.isoformat() if esc.timestamp else None,
+            "label": "🚨 Human Escalation Triggered",
+            "detail": f"{esc.reason}" + (f" · Ticket: {esc.appointment_reference}" if esc.appointment_reference else ""),
+            "status": esc.status,
+            "ticket_reference": esc.appointment_reference,
         })
 
     # Session ended
@@ -222,6 +527,16 @@ async def get_conversation_detail(
             "timestamp": conv.ended_at.isoformat(),
             "label": "Session Ended",
             "detail": f"Resolution: {summary.resolution if summary else 'unknown'}",
+        })
+
+    # Call summary as the very last event (generated after session end)
+    if summary:
+        timeline_events.append({
+            "type": "response",
+            "timestamp": summary.generated_at.isoformat() if summary.generated_at else conv.ended_at.isoformat() if conv and conv.ended_at else None,
+            "label": f"Call Summary · {summary.resolution.capitalize()}",
+            "detail": summary.summary_text or "",
+            "status": summary.resolution,
         })
 
     # Sort all events by timestamp

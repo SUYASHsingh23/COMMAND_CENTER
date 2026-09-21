@@ -90,10 +90,18 @@ class BillingService:
                 if not invoice:
                     return {"success": False, "error": f"Invoice {invoice_id} not found"}
 
-                if Decimal(str(amount)) > invoice.total_amount:
+                req_amount = Decimal(str(amount))
+
+                # Calculate maximum refundable: the actual amount paid (covers overpayment scenario)
+                # For overcharge: refundable is up to total_amount (what was billed)
+                # For overpayment: refundable is up to (amount_paid - total_amount) i.e. excess paid
+                overpayment = invoice.amount_paid - invoice.total_amount
+                max_refundable = max(invoice.total_amount, invoice.amount_paid)
+
+                if req_amount > max_refundable:
                     return {
                         "success": False,
-                        "error": f"Refund amount {amount} exceeds invoice total {float(invoice.total_amount)}",
+                        "error": f"Refund amount {amount} exceeds the maximum refundable amount of {float(max_refundable)} for this invoice.",
                     }
 
                 # 1. Threshold check — persist for human review then return error
@@ -142,7 +150,9 @@ class BillingService:
                 recent_refunds = (await db.execute(recent_refunds_stmt)).scalars().all()
 
                 refunds_24h = [r for r in recent_refunds if r.created_at >= one_day_ago]
-                if len(refunds_24h) >= 1 or len(recent_refunds) >= 3:
+                # Allow up to 2 approved refunds per day (demo: 2 distinct scenarios)
+                # Flag only if more than 2 in 24h (duplicate abuse) or more than 5 in 7 days (fraud)
+                if len(refunds_24h) >= 3 or len(recent_refunds) >= 5:
                     # Generate a CASE- prefixed investigation number, distinct from refund IDs
                     _case_number = f"CASE-{str(uuid.uuid4())[:8].upper()}"
                     _reason_note = (
@@ -232,9 +242,9 @@ class BillingService:
                 )
                 db.add(txn)
 
-                # Update invoice status
+                # Update invoice status only — do NOT mutate amount_paid.
+                # amount_paid reflects what was actually received from the customer and must stay accurate.
                 invoice.status = "refunded"
-                invoice.amount_paid = invoice.amount_paid + Decimal(str(amount))
                 await db.commit()
                 await db.refresh(refund)
 
@@ -320,6 +330,28 @@ class BillingService:
                         "sent_at":           inv.sent_at.isoformat() if inv.sent_at else None,
                         "viewed_at":         inv.viewed_at.isoformat() if inv.viewed_at else None,
                     })
+                    
+                # Fetch recent transactions
+                txn_stmt = (
+                    select(BillingTransaction)
+                    .where(BillingTransaction.customer_id == uuid.UUID(customer_id))
+                    .order_by(desc(BillingTransaction.created_at))
+                    .limit(10)
+                )
+                txn_result = await db.execute(txn_stmt)
+                txns = txn_result.scalars().all()
+                
+                txn_records = []
+                for t in txns:
+                    txn_records.append({
+                        "transaction_type": t.transaction_type,
+                        "amount": float(t.amount),
+                        "status": t.status,
+                        "payment_method": t.payment_method,
+                        "status_reason": t.status_reason,
+                        "gateway_ref": t.gateway_ref,
+                        "created_at": t.created_at.isoformat() if t.created_at else None,
+                    })
 
                 overdue = [r for r in records if r["status"] in ("overdue", "sent") and r["outstanding"] > 0]
                 total_outstanding = sum(r["outstanding"] for r in records if r["outstanding"] > 0)
@@ -330,12 +362,14 @@ class BillingService:
                     "total_outstanding": total_outstanding,
                     "overdue_count": len(overdue),
                     "payment_records": records,
+                    "recent_transactions": txn_records,
                     "summary": (
-                        f"Found {len(records)} invoices. "
+                        f"Found {len(records)} invoices and {len(txn_records)} recent transactions. "
                         f"Outstanding balance: ₹{total_outstanding:.2f}. "
                         f"{len(overdue)} overdue/unpaid invoice(s)."
                     ),
                 }
+
             except Exception as exc:
                 logger.error("BillingService get_payment_history error: %s", exc)
                 return {"found": False, "error": str(exc)}

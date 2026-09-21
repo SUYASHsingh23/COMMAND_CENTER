@@ -13,6 +13,7 @@ export type EventType =
   | 'sentiment.updated'
   | 'escalation.created'
   | 'call.summary'
+  | 'plan.generated'
   | 'audio.completed'
   | 'customer.updated'
   | 'invoice.updated'
@@ -93,6 +94,11 @@ export interface WorkflowStepEvent extends BaseEvent {
   step_name: string
   step_status: string
   steps_completed: string[]
+  detail?: string
+  evidence?: Record<string, any>
+  rule?: string
+  decision?: string
+  step_number?: number
 }
 
 export interface ResponseGeneratedEvent extends BaseEvent {
@@ -147,6 +153,13 @@ export interface AppointmentUpdatedEvent extends BaseEvent {
   appointment_id: string
 }
 
+export interface PlanGeneratedEvent extends BaseEvent {
+  event: 'plan.generated'
+  direct_answer: boolean
+  turn_index: number | null
+  steps: Array<{ step: number; tool: string; reason: string }>
+}
+
 export type AnyEvent =
   | SessionCreatedEvent
   | SessionEndedEvent
@@ -162,6 +175,7 @@ export type AnyEvent =
   | SentimentUpdatedEvent
   | EscalationCreatedEvent
   | CallSummaryEvent
+  | PlanGeneratedEvent
   | CustomerUpdatedEvent
   | InvoiceUpdatedEvent
   | AppointmentUpdatedEvent
