@@ -1,0 +1,363 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* ── Backgrounds — light blue & modern crisp white ── */
+  --bg-primary:    #f0f6ff;
+  --bg-secondary:  #ffffff;
+  --bg-card:       #ffffff;
+  --bg-elevated:   #f8faff;
+
+  /* ── Borders — soft sky / ice blue ── */
+  --border:        #dbeafe;
+  --border-subtle: #eff6ff;
+
+  /* ── Brand accent — royal / vibrant blue (matching login & brand) ── */
+  --accent-primary:     #2563eb;
+  --accent-primary-dim: #1d4ed8;
+
+  /* ── Supporting accents ── */
+  --accent-blue:   #2563eb;
+  --accent-sky:    #0284c7;
+  --accent-green:  #10b981;
+  --accent-amber:  #f59e0b;
+  --accent-red:    #ef4444;
+  --accent-purple: #8b5cf6;
+  --accent-cyan:   #06b6d4;
+
+  /* ── Text — high contrast modern slate ── */
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #94a3b8;
+  --text-accent:    #2563eb;
+
+  /* ── Surface variants ── */
+  --surface-1:  #ffffff;
+  --surface-2:  #f8faff;
+  --surface-3:  #eff6ff;
+
+  /* ── Border radius ── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   16px;
+  --radius-xl:   22px;
+  --radius-full: 9999px;
+
+  /* ── Shadows — soft, elegant blue-tinted ── */
+  --shadow-sm:        0 2px 6px rgba(37, 99, 235, 0.06);
+  --shadow-md:        0 8px 24px rgba(37, 99, 235, 0.08);
+  --shadow-lg:        0 16px 40px rgba(37, 99, 235, 0.12);
+  --shadow-glow-blue: 0 0 25px rgba(37, 99, 235, 0.28);
+  --shadow-glow-teal: 0 0 25px rgba(2, 132, 199, 0.25);
+  --shadow-glow-green: 0 0 25px rgba(16, 185, 129, 0.25);
+
+  /* ── Chat Message Bubble Tokens ── */
+  --user-bubble-bg:     rgba(219, 234, 254, 0.95);
+  --user-bubble-border: rgba(147, 197, 253, 0.85);
+  --user-bubble-text:   #0f172a;
+  --agent-bubble-bg:     #1e293b;
+  --agent-bubble-border: rgba(255, 255, 255, 0.08);
+  --agent-bubble-text:   #ffffff;
+
+  /* ── Typography ── */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  /* ── Transitions ── */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+}
+
+html, body {
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* ── Scrollbar — light, minimal ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--border-subtle);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ── Glass morphism — light version ── */
+.glass {
+  background: rgba(255, 255, 255, 0.80);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+}
+
+/* ── Card base ── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.badge--green {
+  background: rgba(21, 128, 61, 0.10);
+  color: var(--accent-green);
+  border: 1px solid rgba(21, 128, 61, 0.22);
+}
+
+.badge--amber {
+  background: rgba(180, 83, 9, 0.10);
+  color: var(--accent-amber);
+  border: 1px solid rgba(180, 83, 9, 0.22);
+}
+
+.badge--red {
+  background: rgba(192, 57, 43, 0.10);
+  color: var(--accent-red);
+  border: 1px solid rgba(192, 57, 43, 0.22);
+}
+
+.badge--blue {
+  background: rgba(29, 111, 164, 0.10);
+  color: var(--accent-blue);
+  border: 1px solid rgba(29, 111, 164, 0.22);
+}
+
+.badge--purple {
+  background: rgba(109, 40, 217, 0.10);
+  color: var(--accent-purple);
+  border: 1px solid rgba(109, 40, 217, 0.22);
+}
+
+.badge--teal {
+  background: rgba(15, 118, 110, 0.10);
+  color: var(--accent-primary);
+  border: 1px solid rgba(15, 118, 110, 0.22);
+}
+
+/* ── Animations ── */
+@keyframes pulse-ring {
+  0%   { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Login Card Entrance Animation (Spec: 700ms ease-out, 20% opacity + smaller + lower -> full size) ── */
+@keyframes loginCardEntrance {
+  0% {
+    opacity: 0.2;
+    transform: translateY(35px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-login-card {
+  animation: loginCardEntrance 700ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* ── Global Dark Theme class helper ── */
+body.dark-mode {
+  --bg-primary: #0b1120;
+  --bg-secondary: #0f172a;
+  --bg-card: #1e293b;
+  --bg-elevated: #1e293b;
+  --border: rgba(255, 255, 255, 0.12);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --surface-1: #0f172a;
+  --surface-2: #1e293b;
+  --surface-3: #334155;
+  --user-bubble-bg: rgba(30, 58, 138, 0.45);
+  --user-bubble-border: rgba(59, 130, 246, 0.4);
+  --user-bubble-text: #eff6ff;
+  --agent-bubble-bg: #0f172a;
+  --agent-bubble-border: rgba(255, 255, 255, 0.12);
+  --agent-bubble-text: #f8fafc;
+}
+
+/* ── Portal Radar Wave Animations ── */
+@keyframes radar-ripple-1 {
+  0% {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes radar-ripple-2 {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.25;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+@keyframes radar-ripple-3 {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.18;
+  }
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+.radar-ring-1 {
+  animation: radar-ripple-1 2.6s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+.radar-ring-2 {
+  animation: radar-ripple-2 2.6s cubic-bezier(0.25, 1, 0.5, 1) 0.65s infinite;
+}
+
+.radar-ring-3 {
+  animation: radar-ripple-3 2.6s cubic-bezier(0.25, 1, 0.5, 1) 1.3s infinite;
+}
+
+/* ── Portal 3-Column Slide-Out & Radial Transitions ── */
+.portal-col-left {
+  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1), opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+.portal-col-left.is-exiting {
+  transform: translateX(-120%) !important;
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.portal-col-right {
+  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1), opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+.portal-col-right.is-exiting {
+  transform: translateX(120%) !important;
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.portal-hero-card {
+  transition: opacity 550ms cubic-bezier(0.4, 0, 0.2, 1), transform 550ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.portal-hero-card.is-exiting {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.portal-radar-expanding {
+  transform: scale(3.5) !important;
+  opacity: 0 !important;
+  transition: transform 550ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 550ms ease-out !important;
+  pointer-events: none;
+}
+
